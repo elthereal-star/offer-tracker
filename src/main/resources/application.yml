@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: offer-tracker
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:file:./data/offer-tracker
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 枚举按名称字符串存库，避免依赖 MyBatis-Plus 的 IEnum 约定
+    default-enum-type-handler: org.apache.ibatis.type.EnumTypeHandler
+  global-config:
+    banner: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
