@@ -4,6 +4,3 @@ spring:
     url: jdbc:mysql://localhost:3306/offer_tracker?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${DB_USER:root}
     password: ${DB_PASSWORD:root}
-  sql:
-    init:
-      mode: always

@@ -42,27 +42,37 @@ class ApplicationFlowTest {
         Company company = companyService.create(new CreateCompanyRequest("示例科技", null, null));
 
         JobApplication application = applicationService.create(new CreateApplicationRequest(
-                company.getId(), "后端开发实习生", "北京", "300-400/天", "实习僧", null, null, null));
+                company.getId(), "后端开发实习生", "北京", "300-400/天", "实习僧", null, null, null, null));
         assertEquals(ApplicationStatus.APPLIED, application.getStatus());
 
         applicationService.updateStatus(application.getId(), ApplicationStatus.INTERVIEWING);
         assertEquals(ApplicationStatus.INTERVIEWING,
                 applicationService.getOrThrow(application.getId()).getStatus());
 
+        applicationService.updateStatus(application.getId(), ApplicationStatus.OFFER);
+        applicationService.updateStatus(application.getId(), ApplicationStatus.INTERVIEWING);
+        assertEquals(ApplicationStatus.INTERVIEWING,
+                applicationService.getOrThrow(application.getId()).getStatus());
+
         InterviewRound round = interviewService.add(application.getId(),
-                new AddInterviewRequest(1, InterviewType.VIDEO, null, "自我介绍 + 项目拷打"));
+                new AddInterviewRequest(InterviewType.VIDEO, null, "自我介绍 + 项目拷打"));
+        assertEquals(1, round.getRoundNo());
         assertEquals(InterviewResult.PENDING, round.getResult());
+
+        InterviewRound secondRound = interviewService.add(application.getId(),
+                new AddInterviewRequest(InterviewType.HR, null, null));
+        assertEquals(2, secondRound.getRoundNo());
 
         StatsOverview stats = statsService.overview();
         assertEquals(1, stats.total());
         assertEquals(1L, stats.byStatus().get("INTERVIEWING"));
-        assertEquals(1, stats.interviewCount());
+        assertEquals(2, stats.interviewCount());
     }
 
     @Test
     void rejectsApplicationForUnknownCompany() {
         CreateApplicationRequest request = new CreateApplicationRequest(
-                999999L, "不存在的公司岗位", null, null, null, null, null, null);
+                999999L, "不存在的公司岗位", null, null, null, null, null, null, null);
         assertThrows(BusinessException.class, () -> applicationService.create(request));
     }
 }

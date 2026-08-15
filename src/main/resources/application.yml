@@ -11,8 +11,11 @@ spring:
     password: ""
   sql:
     init:
-      mode: always
-      schema-locations: classpath:db/schema.sql
+      mode: never
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-migration-naming: true
   h2:
     console:
       enabled: true

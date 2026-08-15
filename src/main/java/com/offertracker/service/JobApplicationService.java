@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offertracker.common.BusinessException;
 import com.offertracker.dto.CreateApplicationRequest;
+import com.offertracker.dto.UpdateApplicationRequest;
 import com.offertracker.entity.InterviewRound;
 import com.offertracker.entity.JobApplication;
 import com.offertracker.enums.ApplicationStatus;
@@ -32,29 +33,35 @@ public class JobApplicationService {
 
     public JobApplication create(CreateApplicationRequest request) {
         companyService.getOrThrow(request.companyId());
+        ApplicationStatus status = request.status() == null ? ApplicationStatus.APPLIED : request.status();
+        String position = normalizePosition(request.position(), status);
 
         JobApplication application = new JobApplication();
         application.setCompanyId(request.companyId());
-        application.setPosition(request.position());
+        application.setPosition(position);
         application.setCity(request.city());
         application.setSalaryRange(request.salaryRange());
         application.setSource(request.source());
         application.setJobUrl(request.jobUrl());
         application.setNotes(request.notes());
-        application.setStatus(ApplicationStatus.APPLIED);
-        application.setAppliedAt(request.appliedAt() != null ? request.appliedAt() : LocalDate.now());
+        application.setStatus(status);
+        application.setAppliedAt(status == ApplicationStatus.SAVED
+                ? request.appliedAt()
+                : (request.appliedAt() != null ? request.appliedAt() : LocalDate.now()));
         application.setCreatedAt(LocalDateTime.now());
         application.setUpdatedAt(LocalDateTime.now());
         applicationMapper.insert(application);
         return application;
     }
 
-    public Page<JobApplication> page(int pageNum, int pageSize, ApplicationStatus status, Long companyId) {
-        LambdaQueryWrapper<JobApplication> query = new LambdaQueryWrapper<JobApplication>()
-                .eq(status != null, JobApplication::getStatus, status)
-                .eq(companyId != null, JobApplication::getCompanyId, companyId)
-                .orderByDesc(JobApplication::getUpdatedAt);
-        return applicationMapper.selectPage(new Page<>(pageNum, pageSize), query);
+    public Page<JobApplication> page(int pageNum, int pageSize, ApplicationStatus status, Long companyId,
+                                     String keyword, String city, String source,
+                                     LocalDate appliedFrom, LocalDate appliedTo) {
+        if (appliedFrom != null && appliedTo != null && appliedFrom.isAfter(appliedTo)) {
+            throw new BusinessException(400, "投递开始日期不能晚于结束日期");
+        }
+        return applicationMapper.selectFilteredPage(new Page<>(pageNum, pageSize), status, companyId,
+                trimToNull(keyword), trimToNull(city), trimToNull(source), appliedFrom, appliedTo);
     }
 
     public JobApplication getOrThrow(Long id) {
@@ -65,9 +72,58 @@ public class JobApplicationService {
         return application;
     }
 
+    public void lockOrThrow(Long id) {
+        if (applicationMapper.selectIdForUpdate(id) == null) {
+            throw new BusinessException(404, "投递记录不存在: " + id);
+        }
+    }
+
     public JobApplication updateStatus(Long id, ApplicationStatus status) {
         JobApplication application = getOrThrow(id);
+        if (status != ApplicationStatus.SAVED && isBlank(application.getPosition())) {
+            throw new BusinessException(400, "请先补充岗位信息再调整投递状态");
+        }
         application.setStatus(status);
+        if (status == ApplicationStatus.APPLIED && application.getAppliedAt() == null) {
+            application.setAppliedAt(LocalDate.now());
+        }
+        application.setUpdatedAt(LocalDateTime.now());
+        applicationMapper.updateById(application);
+        return application;
+    }
+
+    public void moveToInterviewingIfPreInterview(Long id) {
+        JobApplication application = getOrThrow(id);
+        if (application.getStatus() == ApplicationStatus.SAVED
+                || application.getStatus() == ApplicationStatus.APPLIED
+                || application.getStatus() == ApplicationStatus.WRITTEN_TEST) {
+            if (isBlank(application.getPosition())) {
+                throw new BusinessException(400, "请先补充岗位信息再添加面试");
+            }
+            application.setStatus(ApplicationStatus.INTERVIEWING);
+            application.setUpdatedAt(LocalDateTime.now());
+            applicationMapper.updateById(application);
+        }
+    }
+
+    public void moveToRejected(Long id) {
+        JobApplication application = getOrThrow(id);
+        application.setStatus(ApplicationStatus.REJECTED);
+        application.setUpdatedAt(LocalDateTime.now());
+        applicationMapper.updateById(application);
+    }
+
+    public JobApplication update(Long id, UpdateApplicationRequest request) {
+        JobApplication application = getOrThrow(id);
+        companyService.getOrThrow(request.companyId());
+        application.setCompanyId(request.companyId());
+        application.setPosition(normalizePosition(request.position(), application.getStatus()));
+        application.setCity(trimToNull(request.city()));
+        application.setSalaryRange(trimToNull(request.salaryRange()));
+        application.setSource(trimToNull(request.source()));
+        application.setJobUrl(trimToNull(request.jobUrl()));
+        application.setAppliedAt(request.appliedAt());
+        application.setNotes(trimToNull(request.notes()));
         application.setUpdatedAt(LocalDateTime.now());
         applicationMapper.updateById(application);
         return application;
@@ -79,5 +135,22 @@ public class JobApplicationService {
         interviewRoundMapper.delete(new LambdaQueryWrapper<InterviewRound>()
                 .eq(InterviewRound::getApplicationId, id));
         applicationMapper.deleteById(id);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String normalizePosition(String position, ApplicationStatus status) {
+        String normalized = position == null ? "" : position.trim();
+        if (status != ApplicationStatus.SAVED && normalized.isBlank()) {
+            throw new BusinessException(400, "岗位名称不能为空");
+        }
+        return normalized;
     }
 }

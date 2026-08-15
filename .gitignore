@@ -2,7 +2,16 @@ target/
 data/
 *.class
 *.jar
+*.log
+dist/
+presentations/
 !.mvn/wrapper/*.jar
+
+# 前端
+web/node_modules/
+web/test-results/
+web/playwright-report/
+src/main/resources/static/
 
 # IDE
 .idea/

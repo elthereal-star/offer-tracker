@@ -1,14 +1,25 @@
 package com.offertracker;
 
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationListener;
 
 @SpringBootApplication
 @MapperScan("com.offertracker.mapper")
 public class OfferTrackerApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(OfferTrackerApplication.class, args);
+        SpringApplication application = new SpringApplication(OfferTrackerApplication.class);
+        if (DesktopRuntime.isEnabled()) {
+            if (!DesktopRuntime.prepare()) {
+                return;
+            }
+            application.setHeadless(false);
+            DesktopRuntime.applySystemProperties();
+            application.addListeners((ApplicationListener<ApplicationReadyEvent>) DesktopRuntime::onReady);
+        }
+        application.run(args);
     }
 }

@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+target
+data
+web/node_modules
+web/test-results
+web/playwright-report
+src/main/resources/static
+*.iml
+*.log
