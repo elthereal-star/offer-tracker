@@ -956,6 +956,10 @@ textarea {
 .resume-file-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resume-recovery-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 10px 14px; border: 1px solid #dbeafe; border-radius: 12px; background: #eff6ff; color: #475569; font-size: 12px; }
 .resume-recovery-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-session-history { margin: 12px 0 14px; padding: 12px 14px; border: 1px solid #e0e7ff; border-radius: 12px; background: #f8faff; }
+.resume-session-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; color: #475569; font-size: 12px; }
+.dark-mode .resume-session-history { border-color: #273469; background: #17203a; }
+.dark-mode .resume-session-item { color: #cbd5e1; }
 .ai-interview-question { padding: 24px; border: 1px solid #ddd6fe; border-radius: 18px; background: linear-gradient(135deg, #f5f3ff, #eff6ff); }
 .ai-interview-meta { display: flex; justify-content: space-between; align-items: center; color: #6d28d9; font-size: 12px; font-weight: 800; }
 .ai-interview-question h3 { margin: 24px 0 12px; color: #172033; font-size: 22px; line-height: 1.5; }

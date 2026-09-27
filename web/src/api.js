@@ -68,6 +68,7 @@ export default {
   clearAiConfig: () => http.delete('/ai/config'),
   createAiInterview: (data) => http.post('/ai/interviews', data),
   getAiInterview: (id) => http.get(`/ai/interviews/${id}`),
+  listAiInterviews: (resumeId) => http.get('/ai/interviews', { params: resumeId ? { resumeId } : {} }),
   answerAiInterview: (sessionId, questionId, data) => http.put(`/ai/interviews/${sessionId}/questions/${questionId}/answer`, data),
   evaluateAiInterview: (sessionId, questionId) => http.post(`/ai/interviews/${sessionId}/questions/${questionId}/evaluate`),
   followUpAiInterview: (sessionId, questionId) => http.post(`/ai/interviews/${sessionId}/questions/${questionId}/follow-up`),

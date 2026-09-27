@@ -30,6 +30,13 @@
       <span>最近一次面试会话：{{ lastInterviewId }}</span>
       <el-button text type="primary" :loading="interviewLoading" @click="restoreInterview">恢复面试</el-button>
     </div>
+    <div v-if="interviewSessions.length" class="resume-session-history">
+      <strong>面试记录</strong>
+      <div v-for="item in interviewSessions" :key="item.id" class="resume-session-item">
+        <span>会话 #{{ item.id }} · {{ item.status === 'COMPLETED' ? `已完成，平均 ${item.averageScore ?? '-'} 分` : '进行中' }}</span>
+        <el-button text type="primary" size="small" :loading="interviewLoading" @click="restoreSession(item.id)">打开</el-button>
+      </div>
+    </div>
     <el-table v-loading="loading" :data="resumes" class="resume-table" empty-text="还没有上传简历">
       <el-table-column label="文件" min-width="220">
         <template #default="{ row }">
@@ -84,13 +91,14 @@ const interviewError = ref('')
 const interview = ref(null)
 const interviewVisible = ref(false)
 const lastInterviewId = ref(localStorage.getItem('offer-tracker-last-ai-interview') || '')
+const interviewSessions = ref([])
 
 const applicationLabel = (application) => `${props.companyMap[application.companyId] || '未知公司'} · ${application.position || '岗位待确定'}`
 
 async function load() {
   loading.value = true
   errorMessage.value = ''
-  try { resumes.value = await api.listResumes() } catch (error) { errorMessage.value = error.message || '简历列表加载失败' } finally { loading.value = false }
+  try { resumes.value = await api.listResumes(); interviewSessions.value = await api.listAiInterviews() } catch (error) { errorMessage.value = error.message || '简历列表加载失败' } finally { loading.value = false }
 }
 
 async function upload(event) {
@@ -127,6 +135,7 @@ async function startInterview(row) {
     lastInterviewId.value = String(interview.value.id)
     localStorage.setItem('offer-tracker-last-ai-interview', lastInterviewId.value)
     interviewVisible.value = true
+    interviewSessions.value = await api.listAiInterviews()
   } catch (error) {
     interviewError.value = error.message || 'AI 面试启动失败'
   } finally {
@@ -135,10 +144,14 @@ async function startInterview(row) {
 }
 
 async function restoreInterview() {
+  await restoreSession(lastInterviewId.value)
+}
+
+async function restoreSession(id) {
   interviewLoading.value = true
   interviewError.value = ''
   try {
-    interview.value = await api.getAiInterview(lastInterviewId.value)
+    interview.value = await api.getAiInterview(id)
     interviewVisible.value = true
   } catch (error) {
     interviewError.value = error.message || '面试会话恢复失败'

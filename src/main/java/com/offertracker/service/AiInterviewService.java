@@ -24,6 +24,11 @@ public class AiInterviewService {
   return get(session.getId());
  }
  public AiInterviewSessionResponse get(Long id){ AiInterviewSession s=sessions.selectById(id); if(s==null) throw new BusinessException(404,"AI 面试会话不存在: "+id); List<AiInterviewQuestionResponse> qs=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,id).orderByAsc(AiInterviewQuestion::getQuestionNo)).stream().map(q->new AiInterviewQuestionResponse(q.getId(),q.getQuestionNo(),q.getContent(),q.getAnswer(),q.getScore(),q.getFeedback())).toList(); return new AiInterviewSessionResponse(s.getId(),s.getResumeId(),s.getApplicationId(),s.getStatus(),s.getAverageScore(),s.getReport(),qs); }
+ public List<AiInterviewSessionResponse> list(Long resumeId){
+  LambdaQueryWrapper<AiInterviewSession> wrapper=new LambdaQueryWrapper<AiInterviewSession>().orderByDesc(AiInterviewSession::getUpdatedAt);
+  if(resumeId!=null) wrapper.eq(AiInterviewSession::getResumeId,resumeId);
+  return sessions.selectList(wrapper).stream().map(s->get(s.getId())).toList();
+ }
  @Transactional public AiInterviewSessionResponse answer(Long sessionId, Long questionId, SubmitAiInterviewAnswerRequest req){
   AiInterviewSession session=sessions.selectById(sessionId); if(session==null) throw new BusinessException(404,"AI 面试会话不存在: "+sessionId);
   if(!"ACTIVE".equals(session.getStatus())) throw new BusinessException(409,"AI 面试会话已结束");
