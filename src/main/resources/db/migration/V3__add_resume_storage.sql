@@ -10,4 +10,4 @@ CREATE TABLE IF NOT EXISTS resumes (
     updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_resumes_application_id ON resumes (application_id);
+CREATE INDEX idx_resumes_application_id ON resumes (application_id);
