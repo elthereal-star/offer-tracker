@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -65,6 +66,56 @@ class AiInterviewApiTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"我设计了缓存和降级方案。\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions[0].answer").value("我设计了缓存和降级方案。"));
         mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up", sessionId, questionId))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void completesInterviewWithScoresFollowUpReportAndRestorableHistory() throws Exception {
+        long resumeId = uploadResume();
+        when(ai.chat(any())).thenReturn(
+                "请介绍一个你使用 Spring Boot 解决复杂问题的项目。",
+                "{\"score\":88,\"feedback\":\"结构清晰，可补充量化结果。\"}",
+                "你如何验证该方案的性能提升？",
+                "{\"score\":92,\"feedback\":\"有数据意识，回答具体。\"}",
+                "优势：表达清晰。待提升：补充量化成果。建议继续准备项目数据。"
+        );
+
+        String created = mockMvc.perform(post("/api/ai/interviews").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resumeId\":" + resumeId + "}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var tree = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created);
+        long sessionId = tree.path("data").path("id").asLong();
+        long firstQuestionId = tree.path("data").path("questions").get(0).path("id").asLong();
+
+        mockMvc.perform(put("/api/ai/interviews/{sessionId}/questions/{questionId}/answer", sessionId, firstQuestionId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"我设计了缓存和降级方案。\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/evaluate", sessionId, firstQuestionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.questions[0].score").value(88));
+
+        String followedUp = mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up", sessionId, firstQuestionId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions[1].questionNo").value(2))
+                .andReturn().getResponse().getContentAsString();
+        long secondQuestionId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(followedUp)
+                .path("data").path("questions").get(1).path("id").asLong();
+        mockMvc.perform(put("/api/ai/interviews/{sessionId}/questions/{questionId}/answer", sessionId, secondQuestionId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"使用压测对比优化前后的延迟。\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/evaluate", sessionId, secondQuestionId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions[1].score").value(92));
+
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/finish", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.averageScore").value(90))
+                .andExpect(jsonPath("$.data.report").value("优势：表达清晰。待提升：补充量化成果。建议继续准备项目数据。"));
+        mockMvc.perform(get("/api/ai/interviews/{id}", sessionId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions.length()").value(2));
+        mockMvc.perform(get("/api/ai/interviews").param("resumeId", String.valueOf(resumeId)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value(sessionId));
+        mockMvc.perform(put("/api/ai/interviews/{sessionId}/questions/{questionId}/answer", sessionId, secondQuestionId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"修改已结束面试的回答。\"}"))
                 .andExpect(status().isConflict());
     }
 
