@@ -40,4 +40,15 @@ public class AiInterviewService {
   try { String json=raw.trim().replaceFirst("^```(?:json)?\\s*","").replaceFirst("\\s*```$",""); JsonNode node=objectMapper.readTree(json); int score=node.path("score").asInt(-1); String feedback=node.path("feedback").asText("").trim(); if(score<0||score>100||feedback.isBlank()) throw new IllegalArgumentException(); question.setScore(score); question.setFeedback(feedback); questions.updateById(question); return get(sessionId); }
   catch(Exception ex){ throw new BusinessException(502,"AI 评分返回格式无效，请重试"); }
  }
+ @Transactional public AiInterviewSessionResponse followUp(Long sessionId, Long questionId){
+  AiInterviewSession session=sessions.selectById(sessionId); if(session==null) throw new BusinessException(404,"AI 面试会话不存在: "+sessionId);
+  if(!"ACTIVE".equals(session.getStatus())) throw new BusinessException(409,"AI 面试会话已结束");
+  AiInterviewQuestion previous=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
+  if(previous==null) throw new BusinessException(404,"AI 面试题目不存在: "+questionId);
+  if(previous.getScore()==null || previous.getFeedback()==null) throw new BusinessException(409,"请先完成当前题目的 AI 评分");
+  Integer nextNo=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,sessionId)).stream().map(AiInterviewQuestion::getQuestionNo).max(Integer::compareTo).orElse(0)+1;
+  String prompt="请根据上一道面试题、候选人回答和评分反馈，生成下一道有针对性的追问。只返回题目本身，不要编号、不要解释。上一题：\n"+previous.getContent()+"\n回答：\n"+previous.getAnswer()+"\n评分反馈：\n"+previous.getFeedback();
+  String content=ai.chat(List.of(new AiChatMessage("system","你负责设计循序渐进、友好的技术面试追问。"),new AiChatMessage("user",prompt)));
+  AiInterviewQuestion next=new AiInterviewQuestion(); next.setSessionId(sessionId); next.setQuestionNo(nextNo); next.setContent(content.trim()); next.setCreatedAt(LocalDateTime.now()); questions.insert(next); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); return get(sessionId);
+ }
 }

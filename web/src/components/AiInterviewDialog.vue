@@ -12,8 +12,8 @@
     </template>
     <el-alert v-if="errorMessage" type="error" :closable="false" :title="errorMessage" />
     <section v-if="session" class="ai-interview-question">
-      <div class="ai-interview-meta"><span>第 {{ session.questions?.length || 1 }} 题</span><el-tag type="success">进行中</el-tag></div>
-      <h3>{{ session.questions?.[0]?.content || '正在准备问题…' }}</h3>
+      <div class="ai-interview-meta"><span>第 {{ question?.questionNo || 1 }} 题</span><el-tag type="success">进行中</el-tag></div>
+      <h3>{{ question?.content || '正在准备问题…' }}</h3>
       <el-input v-model="answer" type="textarea" :rows="5" maxlength="5000" show-word-limit placeholder="输入你的回答" :disabled="answerSaved" />
       <div class="ai-interview-actions">
         <span v-if="answerSaved" class="ai-interview-saved">回答已保存</span>
@@ -22,6 +22,7 @@
       <div v-if="question?.score !== null && question?.score !== undefined" class="ai-interview-feedback">
         <strong>AI 评分：{{ question.score }} 分</strong>
         <p>{{ question.feedback }}</p>
+        <el-button type="primary" plain :loading="generating" @click="generateFollowUp">生成下一道追问</el-button>
       </div>
       <el-button v-else class="ai-interview-evaluate" type="success" plain :loading="evaluating" :disabled="!answerSaved" @click="evaluateAnswer">获取 AI 评分</el-button>
     </section>
@@ -52,6 +53,7 @@ const answer = ref('')
 const saving = ref(false)
 const answerSaved = ref(false)
 const evaluating = ref(false)
+const generating = ref(false)
 const question = ref(null)
 watch(() => props.session, (value) => { question.value = value?.questions?.[0] || null; answer.value = question.value?.answer || ''; answerSaved.value = Boolean(answer.value) }, { immediate: true })
 
@@ -59,15 +61,22 @@ async function submitAnswer() {
   const question = props.session?.questions?.[0]
   if (!question) return
   saving.value = true
-  try { const updated = await api.answerAiInterview(props.session.id, question.id, { answer: answer.value }); question.value = updated.questions?.[0] || question.value; answerSaved.value = true; ElMessage.success('回答已保存') }
+  try { const updated = await api.answerAiInterview(props.session.id, question.id, { answer: answer.value }); question.value = updated.questions?.find((item) => item.id === question.value.id) || question.value; answerSaved.value = true; ElMessage.success('回答已保存') }
   catch (error) { ElMessage.error(error.message || '回答保存失败') }
   finally { saving.value = false }
 }
 async function evaluateAnswer() {
   if (!props.session?.id || !question.value) return
   evaluating.value = true
-  try { const updated = await api.evaluateAiInterview(props.session.id, question.value.id); question.value = updated.questions?.[0] || question.value; ElMessage.success('AI 评分完成') }
+  try { const updated = await api.evaluateAiInterview(props.session.id, question.value.id); question.value = updated.questions?.find((item) => item.id === question.value.id) || question.value; ElMessage.success('AI 评分完成') }
   catch (error) { ElMessage.error(error.message || 'AI 评分失败') }
   finally { evaluating.value = false }
+}
+async function generateFollowUp() {
+  if (!props.session?.id || !question.value) return
+  generating.value = true
+  try { const updated = await api.followUpAiInterview(props.session.id, question.value.id); question.value = updated.questions?.at(-1) || question.value; answer.value = ''; answerSaved.value = false; ElMessage.success('下一道追问已生成') }
+  catch (error) { ElMessage.error(error.message || '追问生成失败') }
+  finally { generating.value = false }
 }
 </script>
