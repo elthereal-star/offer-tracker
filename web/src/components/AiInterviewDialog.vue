@@ -14,7 +14,11 @@
     <section v-if="session" class="ai-interview-question">
       <div class="ai-interview-meta"><span>第 {{ session.questions?.length || 1 }} 题</span><el-tag type="success">进行中</el-tag></div>
       <h3>{{ session.questions?.[0]?.content || '正在准备问题…' }}</h3>
-      <p>本阶段先完成题目生成，回答和 AI 评分将在下一步接入。</p>
+      <el-input v-model="answer" type="textarea" :rows="5" maxlength="5000" show-word-limit placeholder="输入你的回答" :disabled="answerSaved" />
+      <div class="ai-interview-actions">
+        <span v-if="answerSaved" class="ai-interview-saved">回答已保存</span>
+        <el-button type="primary" :loading="saving" :disabled="!answer.trim() || answerSaved" @click="submitAnswer">提交回答</el-button>
+      </div>
     </section>
     <el-skeleton v-else animated :rows="3" />
   </el-dialog>
@@ -22,16 +26,34 @@
 
 <script setup>
 import { ChatDotRound } from '@element-plus/icons-vue'
-import { ElAlert, ElDialog, ElSkeleton, ElTag } from 'element-plus'
+import { ElAlert, ElButton, ElDialog, ElInput, ElMessage, ElSkeleton, ElTag } from 'element-plus'
 import 'element-plus/es/components/alert/style/css'
 import 'element-plus/es/components/dialog/style/css'
+import 'element-plus/es/components/input/style/css'
+import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/skeleton/style/css'
+import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/tag/style/css'
+import api from '../api'
+import { ref, watch } from 'vue'
 
-defineProps({
+const props = defineProps({
   modelValue: Boolean,
   session: { type: Object, default: null },
   errorMessage: { type: String, default: '' }
 })
 const emit = defineEmits(['update:modelValue'])
+const answer = ref('')
+const saving = ref(false)
+const answerSaved = ref(false)
+watch(() => props.session, (value) => { answer.value = value?.questions?.[0]?.answer || ''; answerSaved.value = Boolean(answer.value) }, { immediate: true })
+
+async function submitAnswer() {
+  const question = props.session?.questions?.[0]
+  if (!question) return
+  saving.value = true
+  try { await api.answerAiInterview(props.session.id, question.id, { answer: answer.value }); answerSaved.value = true; ElMessage.success('回答已保存') }
+  catch (error) { ElMessage.error(error.message || '回答保存失败') }
+  finally { saving.value = false }
+}
 </script>

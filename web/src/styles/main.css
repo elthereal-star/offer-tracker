@@ -960,6 +960,8 @@ textarea {
 .ai-interview-meta { display: flex; justify-content: space-between; align-items: center; color: #6d28d9; font-size: 12px; font-weight: 800; }
 .ai-interview-question h3 { margin: 24px 0 12px; color: #172033; font-size: 22px; line-height: 1.5; }
 .ai-interview-question p { margin: 0; color: #64748b; font-size: 12px; }
+.ai-interview-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.ai-interview-saved { color: #16a34a; font-size: 12px; font-weight: 700; }
 .dark-mode .ai-interview-question { border-color: #4c1d95; background: #221a38; }
 .dark-mode .ai-interview-question h3 { color: #f8fafc; }
 .dark-mode .resume-recovery-row { border-color: #1e3a8a; background: #172554; color: #cbd5e1; }
