@@ -14,6 +14,9 @@
           <el-tooltip :content="darkMode ? '切换为浅色模式' : '切换为深色模式'">
             <el-button :icon="darkMode ? Sunny : Moon" circle :aria-label="darkMode ? '切换为浅色模式' : '切换为深色模式'" @click="toggleDarkMode" />
           </el-tooltip>
+          <el-tooltip content="简历库">
+            <el-button :icon="Document" circle aria-label="简历库" @click="resumeVisible = true" />
+          </el-tooltip>
           <el-tooltip content="公司管理">
             <el-button :icon="OfficeBuilding" circle aria-label="公司管理" @click="companyVisible = true" />
           </el-tooltip>
@@ -155,6 +158,12 @@
         v-model="dataVisible"
         @imported="afterImport"
       />
+      <ResumeManagerDialog
+        v-if="resumeVisible"
+        v-model="resumeVisible"
+        :applications="applications"
+        :company-map="companyMap"
+      />
     </div>
   </el-config-provider>
 </template>
@@ -178,11 +187,12 @@ import {
   ElSkeletonItem,
   ElTooltip
 } from 'element-plus'
-import { Briefcase, Calendar, CollectionTag, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Star, Sunny } from '@element-plus/icons-vue'
+import { Briefcase, Calendar, CollectionTag, Document, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Star, Sunny } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/config-provider/style/css'
 import 'element-plus/es/components/date-picker/style/css'
+import 'element-plus/es/components/icon/style/css'
 import 'element-plus/es/components/empty/style/css'
 import 'element-plus/es/components/input/style/css'
 import 'element-plus/es/components/loading/style/css'
@@ -204,6 +214,7 @@ const SaveCompanyDialog = defineAsyncComponent(() => import('./components/SaveCo
 const ApplicationDrawer = defineAsyncComponent(() => import('./components/ApplicationDrawer.vue'))
 const CompanyManagerDialog = defineAsyncComponent(() => import('./components/CompanyManagerDialog.vue'))
 const DataManagerDialog = defineAsyncComponent(() => import('./components/DataManagerDialog.vue'))
+const ResumeManagerDialog = defineAsyncComponent(() => import('./components/ResumeManagerDialog.vue'))
 const AnalyticsView = defineAsyncComponent(() => import('./components/AnalyticsView.vue'))
 const CalendarView = defineAsyncComponent(() => import('./components/CalendarView.vue'))
 const TableView = defineAsyncComponent(() => import('./components/TableView.vue'))
@@ -219,6 +230,7 @@ const savedDialogVisible = ref(false)
 const drawerVisible = ref(false)
 const companyVisible = ref(false)
 const dataVisible = ref(false)
+const resumeVisible = ref(false)
 const viewMode = ref('kanban')
 const darkMode = ref(localStorage.getItem('offer-tracker-theme') === 'dark' || (!localStorage.getItem('offer-tracker-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches))
 const calendarInterviews = ref({})

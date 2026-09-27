@@ -55,6 +55,14 @@ export default {
   addInterview: (applicationId, data) => http.post(`/applications/${applicationId}/interviews`, data),
   updateInterviewResult: (roundId, result) =>
     http.put(`/applications/interviews/${roundId}/result`, { result }),
+  listResumes: (applicationId) => http.get('/resumes', { params: applicationId ? { applicationId } : {} }),
+  uploadResume: (file, applicationId) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (applicationId) form.append('applicationId', applicationId)
+    return http.post('/resumes', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  deleteResume: (id) => http.delete(`/resumes/${id}`),
   validateImport: (data) => http.post('/data/import/validate', data),
   importBackup: (data, replaceExisting = false) =>
     http.post('/data/import', data, { params: { replaceExisting } }),

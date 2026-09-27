@@ -946,6 +946,14 @@ textarea {
 .dialog-heading-icon svg { width: 21px; height: 21px; }
 .dialog-heading h2 { margin: 0; color: #172033; font-size: 18px; letter-spacing: 0; }
 .dialog-heading p { margin: 3px 0 0; color: #64748b; font-size: 12px; }
+.resume-upload-panel { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 15px; border: 1px dashed #bfdbfe; border-radius: 16px; background: linear-gradient(135deg, #eff6ff, #f5f3ff); }
+.resume-upload-copy { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.resume-upload-copy strong { color: #172033; font-size: 13px; }
+.resume-upload-copy span { color: #64748b; font-size: 11px; }
+.resume-table { border-radius: 14px; overflow: hidden; }
+.resume-file-cell { display: flex; align-items: center; gap: 8px; min-width: 0; color: #334155; font-weight: 700; }
+.resume-file-cell svg { flex: 0 0 auto; width: 17px; color: #2563eb; }
+.resume-file-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .application-form .el-form-item { margin-bottom: 16px; }
 .application-form .el-form-item__label { padding-bottom: 6px; color: #475569; font-size: 12px; font-weight: 700; }
@@ -1013,6 +1021,9 @@ textarea {
 .dark-mode .application-dialog .el-dialog__header { border-color: #334155; background: #17233a; }
 .dark-mode .application-dialog-saved .el-dialog__header { background: #292316; }
 .dark-mode .dialog-heading h2 { color: #f8fafc; }
+.dark-mode .resume-upload-panel { border-color: #4338ca; background: linear-gradient(135deg, #172554, #221a38); }
+.dark-mode .resume-upload-copy strong,.dark-mode .resume-file-cell { color: #e2e8f0; }
+.dark-mode .resume-upload-copy span { color: #94a3b8; }
 .dark-mode .dialog-heading p,.dark-mode .quick-select-label { color: #94a3b8; }
 .dark-mode .quick-select-block { border-color: #334155; background: #172033; }
 .dark-mode .quick-picks button { color: #cbd5e1; border-color: #334155; background: #1e293b; }
