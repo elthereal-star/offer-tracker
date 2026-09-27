@@ -954,6 +954,15 @@ textarea {
 .resume-file-cell { display: flex; align-items: center; gap: 8px; min-width: 0; color: #334155; font-weight: 700; }
 .resume-file-cell svg { flex: 0 0 auto; width: 17px; color: #2563eb; }
 .resume-file-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resume-recovery-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 10px 14px; border: 1px solid #dbeafe; border-radius: 12px; background: #eff6ff; color: #475569; font-size: 12px; }
+.resume-recovery-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-interview-question { padding: 24px; border: 1px solid #ddd6fe; border-radius: 18px; background: linear-gradient(135deg, #f5f3ff, #eff6ff); }
+.ai-interview-meta { display: flex; justify-content: space-between; align-items: center; color: #6d28d9; font-size: 12px; font-weight: 800; }
+.ai-interview-question h3 { margin: 24px 0 12px; color: #172033; font-size: 22px; line-height: 1.5; }
+.ai-interview-question p { margin: 0; color: #64748b; font-size: 12px; }
+.dark-mode .ai-interview-question { border-color: #4c1d95; background: #221a38; }
+.dark-mode .ai-interview-question h3 { color: #f8fafc; }
+.dark-mode .resume-recovery-row { border-color: #1e3a8a; background: #172554; color: #cbd5e1; }
 .ai-settings-hint { margin: -4px 0 0; color: #64748b; font-size: 12px; line-height: 1.6; }
 
 .application-form .el-form-item { margin-bottom: 16px; }

@@ -66,6 +66,8 @@ export default {
   getAiConfig: () => http.get('/ai/config'),
   saveAiConfig: (data) => http.put('/ai/config', data),
   clearAiConfig: () => http.delete('/ai/config'),
+  createAiInterview: (data) => http.post('/ai/interviews', data),
+  getAiInterview: (id) => http.get(`/ai/interviews/${id}`),
   validateImport: (data) => http.post('/data/import/validate', data),
   importBackup: (data, replaceExisting = false) =>
     http.post('/data/import', data, { params: { replaceExisting } }),
