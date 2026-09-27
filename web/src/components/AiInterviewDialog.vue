@@ -19,6 +19,11 @@
         <span v-if="answerSaved" class="ai-interview-saved">回答已保存</span>
         <el-button type="primary" :loading="saving" :disabled="!answer.trim() || answerSaved" @click="submitAnswer">提交回答</el-button>
       </div>
+      <div v-if="question?.score !== null && question?.score !== undefined" class="ai-interview-feedback">
+        <strong>AI 评分：{{ question.score }} 分</strong>
+        <p>{{ question.feedback }}</p>
+      </div>
+      <el-button v-else class="ai-interview-evaluate" type="success" plain :loading="evaluating" :disabled="!answerSaved" @click="evaluateAnswer">获取 AI 评分</el-button>
     </section>
     <el-skeleton v-else animated :rows="3" />
   </el-dialog>
@@ -46,14 +51,23 @@ const emit = defineEmits(['update:modelValue'])
 const answer = ref('')
 const saving = ref(false)
 const answerSaved = ref(false)
-watch(() => props.session, (value) => { answer.value = value?.questions?.[0]?.answer || ''; answerSaved.value = Boolean(answer.value) }, { immediate: true })
+const evaluating = ref(false)
+const question = ref(null)
+watch(() => props.session, (value) => { question.value = value?.questions?.[0] || null; answer.value = question.value?.answer || ''; answerSaved.value = Boolean(answer.value) }, { immediate: true })
 
 async function submitAnswer() {
   const question = props.session?.questions?.[0]
   if (!question) return
   saving.value = true
-  try { await api.answerAiInterview(props.session.id, question.id, { answer: answer.value }); answerSaved.value = true; ElMessage.success('回答已保存') }
+  try { const updated = await api.answerAiInterview(props.session.id, question.id, { answer: answer.value }); question.value = updated.questions?.[0] || question.value; answerSaved.value = true; ElMessage.success('回答已保存') }
   catch (error) { ElMessage.error(error.message || '回答保存失败') }
   finally { saving.value = false }
+}
+async function evaluateAnswer() {
+  if (!props.session?.id || !question.value) return
+  evaluating.value = true
+  try { const updated = await api.evaluateAiInterview(props.session.id, question.value.id); question.value = updated.questions?.[0] || question.value; ElMessage.success('AI 评分完成') }
+  catch (error) { ElMessage.error(error.message || 'AI 评分失败') }
+  finally { evaluating.value = false }
 }
 </script>

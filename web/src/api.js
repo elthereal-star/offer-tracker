@@ -69,6 +69,7 @@ export default {
   createAiInterview: (data) => http.post('/ai/interviews', data),
   getAiInterview: (id) => http.get(`/ai/interviews/${id}`),
   answerAiInterview: (sessionId, questionId, data) => http.put(`/ai/interviews/${sessionId}/questions/${questionId}/answer`, data),
+  evaluateAiInterview: (sessionId, questionId) => http.post(`/ai/interviews/${sessionId}/questions/${questionId}/evaluate`),
   validateImport: (data) => http.post('/data/import/validate', data),
   importBackup: (data, replaceExisting = false) =>
     http.post('/data/import', data, { params: { replaceExisting } }),

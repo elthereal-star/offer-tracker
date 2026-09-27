@@ -11,4 +11,5 @@ public class AiInterviewController {
  @PostMapping public ApiResponse<AiInterviewSessionResponse> create(@Valid @RequestBody CreateAiInterviewRequest r){return ApiResponse.ok(service.create(r));}
  @GetMapping("/{id}") public ApiResponse<AiInterviewSessionResponse> get(@PathVariable Long id){return ApiResponse.ok(service.get(id));}
  @PutMapping("/{sessionId}/questions/{questionId}/answer") public ApiResponse<AiInterviewSessionResponse> answer(@PathVariable Long sessionId,@PathVariable Long questionId,@Valid @RequestBody SubmitAiInterviewAnswerRequest r){return ApiResponse.ok(service.answer(sessionId,questionId,r));}
+ @PostMapping("/{sessionId}/questions/{questionId}/evaluate") public ApiResponse<AiInterviewSessionResponse> evaluate(@PathVariable Long sessionId,@PathVariable Long questionId){return ApiResponse.ok(service.evaluate(sessionId,questionId));}
 }
