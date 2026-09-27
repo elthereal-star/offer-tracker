@@ -12,12 +12,12 @@
     </template>
     <el-alert v-if="errorMessage" type="error" :closable="false" :title="errorMessage" />
     <section v-if="session" class="ai-interview-question">
-      <div class="ai-interview-meta"><span>第 {{ question?.questionNo || 1 }} 题</span><el-tag type="success">进行中</el-tag></div>
+      <div class="ai-interview-meta"><span>第 {{ question?.questionNo || 1 }} 题</span><el-tag :type="session.status === 'COMPLETED' ? 'info' : 'success'">{{ session.status === 'COMPLETED' ? '已结束' : '进行中' }}</el-tag></div>
       <h3>{{ question?.content || '正在准备问题…' }}</h3>
-      <el-input v-model="answer" type="textarea" :rows="5" maxlength="5000" show-word-limit placeholder="输入你的回答" :disabled="answerSaved" />
+      <el-input v-model="answer" type="textarea" :rows="5" maxlength="5000" placeholder="输入你的回答" :disabled="answerSaved || session.status === 'COMPLETED'" />
       <div class="ai-interview-actions">
         <span v-if="answerSaved" class="ai-interview-saved">回答已保存</span>
-        <el-button type="primary" :loading="saving" :disabled="!answer.trim() || answerSaved" @click="submitAnswer">提交回答</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!answer.trim() || answerSaved || session.status === 'COMPLETED'" @click="submitAnswer">提交回答</el-button>
       </div>
       <div v-if="question?.score !== null && question?.score !== undefined" class="ai-interview-feedback">
         <strong>AI 评分：{{ question.score }} 分</strong>
@@ -25,6 +25,13 @@
         <el-button type="primary" plain :loading="generating" @click="generateFollowUp">生成下一道追问</el-button>
       </div>
       <el-button v-else class="ai-interview-evaluate" type="success" plain :loading="evaluating" :disabled="!answerSaved" @click="evaluateAnswer">获取 AI 评分</el-button>
+      <div v-if="session.status !== 'COMPLETED'" class="ai-interview-finish">
+        <el-button type="warning" plain :loading="finishing" @click="finishInterview">结束面试并生成总结</el-button>
+      </div>
+      <div v-if="session.status === 'COMPLETED' && session.report" class="ai-interview-report">
+        <strong>面试总结（平均分 {{ session.averageScore }}）</strong>
+        <p>{{ session.report }}</p>
+      </div>
     </section>
     <el-skeleton v-else animated :rows="3" />
   </el-dialog>
@@ -54,6 +61,7 @@ const saving = ref(false)
 const answerSaved = ref(false)
 const evaluating = ref(false)
 const generating = ref(false)
+const finishing = ref(false)
 const question = ref(null)
 watch(() => props.session, (value) => { question.value = value?.questions?.[0] || null; answer.value = question.value?.answer || ''; answerSaved.value = Boolean(answer.value) }, { immediate: true })
 
@@ -78,5 +86,12 @@ async function generateFollowUp() {
   try { const updated = await api.followUpAiInterview(props.session.id, question.value.id); question.value = updated.questions?.at(-1) || question.value; answer.value = ''; answerSaved.value = false; ElMessage.success('下一道追问已生成') }
   catch (error) { ElMessage.error(error.message || '追问生成失败') }
   finally { generating.value = false }
+}
+async function finishInterview() {
+  if (!props.session?.id) return
+  finishing.value = true
+  try { const updated = await api.finishAiInterview(props.session.id); Object.assign(props.session, updated); question.value = updated.questions?.at(-1) || question.value; ElMessage.success('面试总结已生成') }
+  catch (error) { ElMessage.error(error.message || '面试结束失败') }
+  finally { finishing.value = false }
 }
 </script>

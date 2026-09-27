@@ -23,13 +23,23 @@ public class AiInterviewService {
   AiInterviewQuestion question=new AiInterviewQuestion(); question.setSessionId(session.getId()); question.setQuestionNo(1); question.setContent(content.trim()); question.setCreatedAt(LocalDateTime.now()); questions.insert(question);
   return get(session.getId());
  }
- public AiInterviewSessionResponse get(Long id){ AiInterviewSession s=sessions.selectById(id); if(s==null) throw new BusinessException(404,"AI 面试会话不存在: "+id); List<AiInterviewQuestionResponse> qs=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,id).orderByAsc(AiInterviewQuestion::getQuestionNo)).stream().map(q->new AiInterviewQuestionResponse(q.getId(),q.getQuestionNo(),q.getContent(),q.getAnswer(),q.getScore(),q.getFeedback())).toList(); return new AiInterviewSessionResponse(s.getId(),s.getResumeId(),s.getApplicationId(),s.getStatus(),qs); }
+ public AiInterviewSessionResponse get(Long id){ AiInterviewSession s=sessions.selectById(id); if(s==null) throw new BusinessException(404,"AI 面试会话不存在: "+id); List<AiInterviewQuestionResponse> qs=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,id).orderByAsc(AiInterviewQuestion::getQuestionNo)).stream().map(q->new AiInterviewQuestionResponse(q.getId(),q.getQuestionNo(),q.getContent(),q.getAnswer(),q.getScore(),q.getFeedback())).toList(); return new AiInterviewSessionResponse(s.getId(),s.getResumeId(),s.getApplicationId(),s.getStatus(),s.getAverageScore(),s.getReport(),qs); }
  @Transactional public AiInterviewSessionResponse answer(Long sessionId, Long questionId, SubmitAiInterviewAnswerRequest req){
   AiInterviewSession session=sessions.selectById(sessionId); if(session==null) throw new BusinessException(404,"AI 面试会话不存在: "+sessionId);
   if(!"ACTIVE".equals(session.getStatus())) throw new BusinessException(409,"AI 面试会话已结束");
   AiInterviewQuestion question=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
   if(question==null) throw new BusinessException(404,"AI 面试题目不存在: "+questionId);
   question.setAnswer(req.answer().trim()); questions.updateById(question); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); return get(sessionId);
+ }
+ @Transactional public AiInterviewSessionResponse finish(Long sessionId){
+  AiInterviewSession session=sessions.selectById(sessionId); if(session==null) throw new BusinessException(404,"AI 面试会话不存在: "+sessionId);
+  if("COMPLETED".equals(session.getStatus())) return get(sessionId);
+  List<AiInterviewQuestion> scored=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,sessionId).isNotNull(AiInterviewQuestion::getScore));
+  if(scored.isEmpty()) throw new BusinessException(409,"请至少完成一道题目的 AI 评分");
+  int average=(int)Math.round(scored.stream().mapToInt(AiInterviewQuestion::getScore).average().orElse(0));
+  String prompt="请根据以下面试评分和反馈生成一段简洁的中文总结，包含优势、待提升方向和下一步建议，不要使用 JSON。平均分："+average+"。反馈：\n"+scored.stream().map(AiInterviewQuestion::getFeedback).reduce((a,b)->a+"\n"+b).orElse("");
+  String report=ai.chat(List.of(new AiChatMessage("system","你是一名专业的求职面试教练。"),new AiChatMessage("user",prompt))).trim();
+  session.setAverageScore(average); session.setReport(report); session.setStatus("COMPLETED"); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); return get(sessionId);
  }
  @Transactional public AiInterviewSessionResponse evaluate(Long sessionId, Long questionId){
   AiInterviewQuestion question=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
