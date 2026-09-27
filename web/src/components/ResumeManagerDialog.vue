@@ -67,11 +67,12 @@
 <script setup>
 import { ref } from 'vue'
 import { ChatDotRound, Delete, Document, Upload, View } from '@element-plus/icons-vue'
-import { ElAlert, ElButton, ElDialog, ElMessage, ElOption, ElPopconfirm, ElSelect, ElTable, ElTableColumn } from 'element-plus'
+import { ElAlert, ElButton, ElDialog, ElMessage, ElMessageBox, ElOption, ElPopconfirm, ElSelect, ElTable, ElTableColumn } from 'element-plus'
 import 'element-plus/es/components/alert/style/css'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/dialog/style/css'
 import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import 'element-plus/es/components/popconfirm/style/css'
 import 'element-plus/es/components/select/style/css'
 import 'element-plus/es/components/table/style/css'
@@ -125,6 +126,15 @@ async function remove(row) {
 }
 
 async function startInterview(row) {
+  try {
+    await ElMessageBox.confirm(
+      '本次面试会将简历文本及后续作答发送到你在 AI 设置中配置的服务商处理。请确认你已了解该服务商的数据处理政策。',
+      'AI 面试数据提示',
+      { confirmButtonText: '继续并开始', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
   interviewLoading.value = true
   interviewError.value = ''
   try {

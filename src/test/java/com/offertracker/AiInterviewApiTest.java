@@ -1,11 +1,13 @@
 package com.offertracker;
 
 import com.offertracker.dto.CreateApplicationRequest;
+import com.offertracker.dto.AiChatMessage;
 import com.offertracker.entity.Company;
 import com.offertracker.service.CompanyService;
 import com.offertracker.service.JobApplicationService;
 import com.offertracker.service.OpenAiCompatibleClient;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,10 +23,13 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import java.io.ByteArrayOutputStream;
 
-import java.util.Map;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -72,6 +77,8 @@ class AiInterviewApiTest {
     @Test
     void completesInterviewWithScoresFollowUpReportAndRestorableHistory() throws Exception {
         long resumeId = uploadResume();
+        Company company = companyService.create(new com.offertracker.dto.CreateCompanyRequest("AI Target " + System.nanoTime(), null, null));
+        long applicationId = applicationService.create(new CreateApplicationRequest(company.getId(), "高级 Java 工程师", "上海", "30-40K", "官网", null, null, null, null)).getId();
         when(ai.chat(any())).thenReturn(
                 "请介绍一个你使用 Spring Boot 解决复杂问题的项目。",
                 "{\"score\":88,\"feedback\":\"结构清晰，可补充量化结果。\"}",
@@ -81,7 +88,7 @@ class AiInterviewApiTest {
         );
 
         String created = mockMvc.perform(post("/api/ai/interviews").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"resumeId\":" + resumeId + "}"))
+                        .content("{\"resumeId\":" + resumeId + ",\"applicationId\":" + applicationId + "}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         var tree = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created);
         long sessionId = tree.path("data").path("id").asLong();
@@ -97,6 +104,8 @@ class AiInterviewApiTest {
         String followedUp = mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up", sessionId, firstQuestionId))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions[1].questionNo").value(2))
                 .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up", sessionId, firstQuestionId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.questions.length()").value(2));
         long secondQuestionId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(followedUp)
                 .path("data").path("questions").get(1).path("id").asLong();
         mockMvc.perform(put("/api/ai/interviews/{sessionId}/questions/{questionId}/answer", sessionId, secondQuestionId)
@@ -117,6 +126,18 @@ class AiInterviewApiTest {
         mockMvc.perform(put("/api/ai/interviews/{sessionId}/questions/{questionId}/answer", sessionId, secondQuestionId)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"修改已结束面试的回答。\"}"))
                 .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/evaluate", sessionId, secondQuestionId))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up", sessionId, secondQuestionId))
+                .andExpect(status().isConflict());
+
+        ArgumentCaptor<List<AiChatMessage>> prompts = ArgumentCaptor.forClass(List.class);
+        verify(ai, times(5)).chat(prompts.capture());
+        String firstPrompt = prompts.getAllValues().get(0).get(1).content();
+        assertTrue(firstPrompt.contains(company.getName()));
+        assertTrue(firstPrompt.contains("高级 Java 工程师"));
+        assertTrue(firstPrompt.contains("上海"));
+        assertTrue(firstPrompt.contains("30-40K"));
     }
 
     private long uploadResume() throws Exception {
