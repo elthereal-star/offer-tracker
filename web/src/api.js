@@ -63,6 +63,9 @@ export default {
     return http.post('/resumes', form, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   deleteResume: (id) => http.delete(`/resumes/${id}`),
+  getAiConfig: () => http.get('/ai/config'),
+  saveAiConfig: (data) => http.put('/ai/config', data),
+  clearAiConfig: () => http.delete('/ai/config'),
   validateImport: (data) => http.post('/data/import/validate', data),
   importBackup: (data, replaceExisting = false) =>
     http.post('/data/import', data, { params: { replaceExisting } }),

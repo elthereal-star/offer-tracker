@@ -954,6 +954,7 @@ textarea {
 .resume-file-cell { display: flex; align-items: center; gap: 8px; min-width: 0; color: #334155; font-weight: 700; }
 .resume-file-cell svg { flex: 0 0 auto; width: 17px; color: #2563eb; }
 .resume-file-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-settings-hint { margin: -4px 0 0; color: #64748b; font-size: 12px; line-height: 1.6; }
 
 .application-form .el-form-item { margin-bottom: 16px; }
 .application-form .el-form-item__label { padding-bottom: 6px; color: #475569; font-size: 12px; font-weight: 700; }

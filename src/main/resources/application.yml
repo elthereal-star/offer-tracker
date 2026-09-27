@@ -36,3 +36,4 @@ springdoc:
 offer-tracker:
   storage:
     resume-dir: ${RESUME_STORAGE_DIR:./data/resumes}
+    ai-config-file: ${AI_CONFIG_FILE:./data/ai-config.json}

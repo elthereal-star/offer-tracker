@@ -17,6 +17,9 @@
           <el-tooltip content="简历库">
             <el-button :icon="Document" circle aria-label="简历库" @click="resumeVisible = true" />
           </el-tooltip>
+          <el-tooltip content="AI 设置">
+            <el-button :icon="Setting" circle aria-label="AI 设置" @click="aiSettingsVisible = true" />
+          </el-tooltip>
           <el-tooltip content="公司管理">
             <el-button :icon="OfficeBuilding" circle aria-label="公司管理" @click="companyVisible = true" />
           </el-tooltip>
@@ -164,6 +167,10 @@
         :applications="applications"
         :company-map="companyMap"
       />
+      <AiSettingsDialog
+        v-if="aiSettingsVisible"
+        v-model="aiSettingsVisible"
+      />
     </div>
   </el-config-provider>
 </template>
@@ -187,7 +194,7 @@ import {
   ElSkeletonItem,
   ElTooltip
 } from 'element-plus'
-import { Briefcase, Calendar, CollectionTag, Document, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Star, Sunny } from '@element-plus/icons-vue'
+import { Briefcase, Calendar, CollectionTag, Document, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Setting, Star, Sunny } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/config-provider/style/css'
@@ -215,6 +222,7 @@ const ApplicationDrawer = defineAsyncComponent(() => import('./components/Applic
 const CompanyManagerDialog = defineAsyncComponent(() => import('./components/CompanyManagerDialog.vue'))
 const DataManagerDialog = defineAsyncComponent(() => import('./components/DataManagerDialog.vue'))
 const ResumeManagerDialog = defineAsyncComponent(() => import('./components/ResumeManagerDialog.vue'))
+const AiSettingsDialog = defineAsyncComponent(() => import('./components/AiSettingsDialog.vue'))
 const AnalyticsView = defineAsyncComponent(() => import('./components/AnalyticsView.vue'))
 const CalendarView = defineAsyncComponent(() => import('./components/CalendarView.vue'))
 const TableView = defineAsyncComponent(() => import('./components/TableView.vue'))
@@ -231,6 +239,7 @@ const drawerVisible = ref(false)
 const companyVisible = ref(false)
 const dataVisible = ref(false)
 const resumeVisible = ref(false)
+const aiSettingsVisible = ref(false)
 const viewMode = ref('kanban')
 const darkMode = ref(localStorage.getItem('offer-tracker-theme') === 'dark' || (!localStorage.getItem('offer-tracker-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches))
 const calendarInterviews = ref({})
