@@ -34,6 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -138,6 +139,26 @@ class AiInterviewApiTest {
         assertTrue(firstPrompt.contains("高级 Java 工程师"));
         assertTrue(firstPrompt.contains("上海"));
         assertTrue(firstPrompt.contains("30-40K"));
+    }
+
+    @Test
+    void keepsInterviewHistoryWhenResumeIsDeleted() throws Exception {
+        long resumeId = uploadResume();
+        when(ai.chat(any())).thenReturn("请介绍一个你使用 Spring Boot 解决复杂问题的项目。");
+        String created = mockMvc.perform(post("/api/ai/interviews").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resumeId\":" + resumeId + "}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        long sessionId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created).path("data").path("id").asLong();
+
+        mockMvc.perform(delete("/api/resumes/{id}", resumeId)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/ai/interviews/{id}", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.resumeId").value(resumeId))
+                .andExpect(jsonPath("$.data.questions.length()").value(1));
+        mockMvc.perform(get("/api/ai/interviews").param("resumeId", String.valueOf(resumeId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(sessionId));
     }
 
     private long uploadResume() throws Exception {
