@@ -40,6 +40,46 @@ java -jar target/offer-tracker-0.1.0.jar
 `OfferTracker.exe` 即可；程序会自动选择空闲端口、打开默认浏览器，并通过系统托盘提供
 “打开”和“退出”操作。便携版数据保存在 `%LOCALAPPDATA%\OfferTracker\data`，不会写入安装目录。
 
+## AI 面试增强版
+
+`ai-interview` 分支是在基础投递看板上增加 AI 面试能力的增强版本；基础版不依赖 AI 服务，也可以独立使用公司、投递、看板、统计、日历和备份功能。
+
+### 配置 AI 服务
+
+启动应用后，打开右上角的“AI 设置”，填写服务地址、模型名称和 API Key。服务地址必须是 OpenAI 兼容 Chat Completions 接口，例如 `https://api.deepseek.com/v1`；模型名称必须是服务商实际支持的模型。项目支持 DeepSeek、OpenAI、通义等兼容服务，费用、速率限制和数据处理规则以所选服务商为准。
+
+API Key 只保存在本机数据目录，页面只显示脱敏后的 Key，不会提交到 GitHub。不要把 API Key 写入代码、提交到仓库或发送到聊天中。
+
+### 开始一次 AI 面试
+
+1. 在“简历管理”中上传文字版 PDF 简历。
+2. 在简历记录上点击“AI 面试”；如需岗位定制，可同时选择对应的投递记录。
+3. 首题会参考简历以及公司、岗位、城市和薪资信息生成。
+4. 提交回答后点击“获取 AI 评分”，评分完成后可以生成下一道追问。
+5. 使用“上一题/下一题”查看本次面试的全部题目、回答和评分。
+6. 至少完成一道题的 AI 评分后，点击“结束面试并生成总结”。结束后的面试为只读状态。
+
+开始面试前，页面会提示简历文本和后续回答将发送给你配置的 AI 服务商；请确认服务商的数据处理政策后再继续。
+
+### 历史记录和数据保留
+
+- AI 面试会保存题目、回答、评分、反馈和总结，便于复盘。
+- 删除简历文件或简历记录**不会删除**关联的 AI 面试历史。
+- 清除 AI 配置只删除本机保存的服务地址、模型和 API Key，不会删除已有面试记录。
+- 默认 H2 数据、简历文件和 AI 配置位于 `data/` 目录；Windows 便携版位于 `%LOCALAPPDATA%\OfferTracker\data`。备份时请保留整个数据目录。
+
+### AI 配置文件位置
+
+通常不需要环境变量；如需调整位置，可在启动前设置：
+
+```powershell
+$env:AI_CONFIG_FILE = 'D:\OfferTrackerData\ai-config.json'
+$env:RESUME_STORAGE_DIR = 'D:\OfferTrackerData\resumes'
+java -jar target/offer-tracker-0.1.0.jar
+```
+
+AI 配置文件包含敏感凭据，应限制文件访问权限，不要加入 JSON 备份、日志或版本控制。
+
 ## 开发模式
 
 后端使用默认端口 `8080`：
@@ -148,6 +188,20 @@ docker run --name offer-tracker -p 8080:8080 \
 | GET | `/api/data/export.csv` | 下载投递 CSV |
 | POST | `/api/data/import/validate` | 预检 JSON 备份 |
 | POST | `/api/data/import` | 追加或替换恢复 JSON 备份 |
+| POST | `/api/resumes` | 上传 PDF 简历 |
+| GET | `/api/resumes` | 查询简历列表 |
+| GET | `/api/resumes/{id}/file` | 下载简历文件 |
+| DELETE | `/api/resumes/{id}` | 删除简历文件和记录，但保留 AI 面试历史 |
+| GET | `/api/ai/config` | 查询 AI 配置状态和脱敏 Key |
+| PUT | `/api/ai/config` | 保存 OpenAI 兼容服务配置 |
+| DELETE | `/api/ai/config` | 清除本机 AI 配置 |
+| POST | `/api/ai/interviews` | 创建 AI 面试并生成首题 |
+| GET | `/api/ai/interviews?resumeId={id}` | 查询简历关联的 AI 面试历史 |
+| GET | `/api/ai/interviews/{id}` | 查看全部题目、回答和评分 |
+| PUT | `/api/ai/interviews/{sessionId}/questions/{questionId}/answer` | 保存回答 |
+| POST | `/api/ai/interviews/{sessionId}/questions/{questionId}/evaluate` | 请求 AI 评分 |
+| POST | `/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up` | 生成下一道追问 |
+| POST | `/api/ai/interviews/{sessionId}/finish` | 结束面试并生成总结 |
 
 状态可以根据实际情况自由调整：`SAVED / APPLIED / WRITTEN_TEST / INTERVIEWING / OFFER / REJECTED / WITHDRAWN`。
 
