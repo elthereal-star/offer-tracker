@@ -34,7 +34,8 @@ export default defineConfig({
           SERVER_PORT: String(port),
           SPRING_DATASOURCE_URL: 'jdbc:h2:mem:offer-tracker-e2e;DB_CLOSE_DELAY=-1',
           SPRING_DATASOURCE_DRIVER_CLASS_NAME: 'org.h2.Driver',
-          SPRING_H2_CONSOLE_ENABLED: 'false'
+          SPRING_H2_CONSOLE_ENABLED: 'false',
+          JWT_SECRET: 'e2e-only-secret-at-least-32-characters'
         }
       }
 })
