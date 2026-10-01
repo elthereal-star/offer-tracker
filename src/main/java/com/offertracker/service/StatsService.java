@@ -1,6 +1,8 @@
 package com.offertracker.service;
 
 import com.offertracker.dto.StatsOverview;
+import com.offertracker.common.CurrentUserContext;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offertracker.entity.InterviewRound;
 import com.offertracker.entity.JobApplication;
 import com.offertracker.enums.ApplicationStatus;
@@ -27,7 +29,9 @@ public class StatsService {
     }
 
     public StatsOverview overview() {
-        List<JobApplication> all = applicationMapper.selectList(null);
+        LambdaQueryWrapper<JobApplication> applicationQuery = new LambdaQueryWrapper<>();
+        if (CurrentUserContext.get() != null) applicationQuery.eq(JobApplication::getOwnerId, CurrentUserContext.get().id());
+        List<JobApplication> all = applicationMapper.selectList(applicationQuery);
         long total = all.size();
 
         Map<ApplicationStatus, Long> counts = all.stream()
@@ -40,7 +44,8 @@ public class StatsService {
             byStatus.put(status.name(), counts.getOrDefault(status, 0L));
         }
 
-        long interviewCount = interviewRoundMapper.selectCount(null);
+        long interviewCount = all.isEmpty() ? 0 : interviewRoundMapper.selectCount(new LambdaQueryWrapper<InterviewRound>()
+                .in(InterviewRound::getApplicationId, all.stream().map(JobApplication::getId).toList()));
         long offerCount = counts.getOrDefault(ApplicationStatus.OFFER, 0L);
         double offerRate = total == 0 ? 0.0 : (double) offerCount / total;
         return new StatsOverview(total, byStatus, interviewCount, offerCount, offerRate);
