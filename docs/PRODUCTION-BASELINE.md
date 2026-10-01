@@ -25,7 +25,7 @@ This document records the rules for the productionization work. It is a baseline
 - Use a managed MySQL service. The default profile remains local H2.
 - Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
 - Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. The migration CLI is implemented, but provider-specific live compatibility testing and a full restore rehearsal remain before go-live.
-- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production login attempts are also atomically limited to five attempts per phone in a 15-minute window and cleared after successful login. IP-level abuse controls still require a trusted reverse-proxy boundary; distributed session coordination, asynchronous AI jobs, alerting/metrics dashboards, automated restore drills, and capacity testing remain future phases.
+- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production login attempts are also atomically limited to five attempts per phone in a 15-minute window and cleared after successful login. AI generation/scoring calls are limited to 10 per authenticated user per minute by default (`AI_REQUESTS_PER_MINUTE`), shared through Redis across instances. IP-level abuse controls still require a trusted reverse-proxy boundary; asynchronous AI jobs, alerting/metrics dashboards, automated restore drills, and capacity testing remain future phases.
 
 ## Required Production Interfaces
 
@@ -48,6 +48,7 @@ Each HTTP response includes an `X-Request-Id` UUID. The same value is attached t
 - Environment-specific configuration must be explicit and validated at startup.
 - Database URLs, object storage endpoints, queue endpoints, and AI provider credentials must be independently configurable.
 - AI provider connection and request timeouts are configurable through `AI_CONNECT_TIMEOUT` and `AI_REQUEST_TIMEOUT`; keep the request timeout bounded and do not add blind retries to billable POST requests.
+- Per-user AI request throttling is configurable with `AI_REQUESTS_PER_MINUTE`; tune it alongside the user's provider quotas and expected interview workflow.
 - Local H2 and local filesystem storage are development/desktop options, not the public multi-user production default.
 
 ## Local Resume Migration
