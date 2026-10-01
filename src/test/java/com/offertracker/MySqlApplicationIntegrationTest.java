@@ -65,7 +65,7 @@ class MySqlApplicationIntegrationTest {
         assertEquals(1, first.getRoundNo());
         assertEquals(2, second.getRoundNo());
         assertEquals("10", jdbcTemplate.queryForObject(
-                "SELECT MAX(version) FROM flyway_schema_history WHERE success = 1", String.class));
+                "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank DESC LIMIT 1", String.class));
         assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
                 INSERT INTO interview_rounds (application_id, round_no, type, result)
                 VALUES (?, ?, ?, ?)
