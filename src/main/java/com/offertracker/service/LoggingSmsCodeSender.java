@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("!sms-cloud")
+@Profile("!production & !sms-cloud")
 public class LoggingSmsCodeSender implements SmsCodeSender {
     private static final Logger log = LoggerFactory.getLogger(LoggingSmsCodeSender.class);
 
