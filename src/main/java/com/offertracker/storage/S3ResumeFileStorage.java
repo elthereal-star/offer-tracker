@@ -32,9 +32,25 @@ public class S3ResumeFileStorage implements ResumeFileStorage {
     @Override
     public String store(byte[] content) {
         String key = prefix + "/" + UUID.randomUUID() + ".pdf";
+        put(key, content);
+        return key;
+    }
+
+    @Override
+    public String storeAt(String locator, byte[] content) {
+        String relativeKey = locator.replace('\\', '/').replaceAll("^/+", "");
+        if (relativeKey.isBlank() || relativeKey.contains("//") ||
+                java.util.Arrays.stream(relativeKey.split("/")).anyMatch(part -> part.equals(".") || part.equals(".."))) {
+            throw new IllegalArgumentException("Invalid object locator");
+        }
+        String key = prefix + "/" + relativeKey;
+        put(key, content);
+        return key;
+    }
+
+    private void put(String key, byte[] content) {
         client.putObject(PutObjectRequest.builder().bucket(bucket).key(key).contentType("application/pdf").build(),
                 RequestBody.fromBytes(content));
-        return key;
     }
 
     @Override

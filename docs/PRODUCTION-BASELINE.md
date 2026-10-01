@@ -24,7 +24,7 @@ This document records the rules for the productionization work. It is a baseline
 - Registration is not production-ready until a cloud `SmsCodeSender` adapter is selected and supplied with the `sms-cloud` profile. The local logging adapter is disabled under `production`; without a provider the verification-code endpoint returns 503 and does not log codes.
 - Use a managed MySQL service. The default profile remains local H2.
 - Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
-- Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. A resumable migration utility and provider-specific live compatibility test remain to be built.
+- Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. The migration CLI is implemented, but provider-specific live compatibility testing and a full restore rehearsal remain before go-live.
 - SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production health probes and Prometheus metrics are exposed on a separate management port that must remain private. Login/IP abuse controls, distributed session coordination, asynchronous AI jobs, alerting/metrics dashboards, automated restore drills, and capacity testing remain future phases.
 
 ## Required Production Interfaces
@@ -46,6 +46,29 @@ Every externally reachable interface must define:
 - Environment-specific configuration must be explicit and validated at startup.
 - Database URLs, object storage endpoints, queue endpoints, and AI provider credentials must be independently configurable.
 - Local H2 and local filesystem storage are development/desktop options, not the public multi-user production default.
+
+## Local Resume Migration
+
+Run this once per deployment during a maintenance window, with application writes stopped, a verified database backup, the existing resume directory mounted at `RESUME_STORAGE_DIR`, and the destination S3-compatible bucket configured. The first invocation is read-only and checks source files:
+
+```sh
+java -jar target/offer-tracker-0.1.0.jar \
+  --spring.profiles.active=mysql,production \
+  --spring.main.web-application-type=none \
+  --offer-tracker.resume-migration.enabled=true
+```
+
+Review the summary. To upload files and conditionally update database locators, repeat with `--apply`:
+
+```sh
+java -jar target/offer-tracker-0.1.0.jar \
+  --spring.profiles.active=mysql,production \
+  --spring.main.web-application-type=none \
+  --offer-tracker.resume-migration.enabled=true \
+  --apply
+```
+
+The command accepts only regular files under `RESUME_STORAGE_DIR`, rejects files over 20 MiB, processes records in bounded pages, and emits record IDs and exception types only. S3 keys are deterministic (`<S3_PREFIX>/legacy/<resume-id>.pdf`), so rerunning after an interrupted upload safely overwrites the same object. A database locator is updated only if it still matches the scanned local locator. Local files are deliberately retained; verify downloads against the destination provider and complete backups before any separate cleanup. A successful command is not proof of provider compatibility or a restore test.
 
 ## Phase 0 Exit Criteria
 
