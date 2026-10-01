@@ -2,10 +2,9 @@ package com.offertracker.controller;
 
 import com.offertracker.common.ApiResponse;
 import com.offertracker.dto.ResumeResponse;
-import com.offertracker.entity.Resume;
 import com.offertracker.service.ResumeService;
 import jakarta.validation.constraints.Positive;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -48,14 +47,12 @@ public class ResumeController {
 
     @GetMapping("/{id}/file")
     public ResponseEntity<Resource> download(@PathVariable @Positive Long id) {
-        Resume resume = resumeService.getOrThrow(id);
-        FileSystemResource resource = new FileSystemResource(resume.getStoragePath());
-        if (!resource.exists()) return ResponseEntity.notFound().build();
+        ResumeService.ResumeFile file = resumeService.download(id);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
-                        .filename(resume.getOriginalFilename(), StandardCharsets.UTF_8).build().toString())
-                .body(resource);
+                        .filename(file.resume().getOriginalFilename(), StandardCharsets.UTF_8).build().toString())
+                .body(new InputStreamResource(file.content()));
     }
 
     @DeleteMapping("/{id}")

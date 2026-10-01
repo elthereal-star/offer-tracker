@@ -10,3 +10,11 @@ offer-tracker:
     jwt-secret: ${JWT_SECRET}
     required: ${AUTH_REQUIRED:true}
     config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY}
+  storage:
+    type: ${RESUME_STORAGE_TYPE:s3}
+    s3:
+      endpoint: ${S3_ENDPOINT}
+      region: ${S3_REGION}
+      bucket: ${S3_BUCKET}
+      prefix: ${S3_PREFIX:offer-tracker/resumes}
+      path-style-access: ${S3_PATH_STYLE_ACCESS:true}

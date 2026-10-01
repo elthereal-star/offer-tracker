@@ -168,13 +168,13 @@ docker run --name offer-tracker -p 8080:8080 \
 
 ## 公网生产启动
 
-公网部署必须使用 MySQL 与 `production` profile。先在密钥管理系统中配置独立的 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`JWT_SECRET` 和 `AI_CONFIG_ENCRYPTION_KEY`；两个密钥至少 32 个字符，AI 加密密钥需备份并保持稳定。生产 profile 默认启用强制认证：
+公网部署必须使用 MySQL 与 `production` profile。先在密钥管理系统中配置 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`JWT_SECRET`、`AI_CONFIG_ENCRYPTION_KEY` 和对象存储的 `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`；两个密钥至少 32 个字符，AI 加密密钥需备份并保持稳定。对象存储凭据使用 AWS SDK 默认凭据链（例如注入 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或实例角色）。生产 profile 默认启用强制认证：
 
 ```bash
 java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
 ```
 
-不要在公网部署中使用默认 H2、本地 JWT/加密密钥或本地简历目录。当前简历文件仍在实例本地磁盘，因此在对象存储接入完成前，本版本不适合运行多个无共享磁盘的应用实例。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
+不要在公网部署中使用默认 H2 或本地 JWT/加密密钥。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
 
 ## API 一览
 

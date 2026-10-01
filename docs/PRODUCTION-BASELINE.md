@@ -22,7 +22,8 @@ This document records the rules for the productionization work. It is a baseline
 - Provide independent secrets `JWT_SECRET` and `AI_CONFIG_ENCRYPTION_KEY`, each at least 32 characters. The encryption key must be backed up and kept stable; rotating it requires re-encrypting stored AI credentials. The fallback values in the default profile are local-only and must never be used publicly.
 - Complete the legacy ownership cutover before enabling public access: records created before owner IDs were introduced have `owner_id IS NULL`, and authenticated queries intentionally hide them. Assign historical rows to the verified migration account in a controlled maintenance step; never auto-claim them for the first registrant.
 - Use a managed MySQL service. The default profile remains local H2.
-- Resume files still use local disk and are not safe for multi-instance deployments; object storage is not implemented yet.
+- Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
+- Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. A resumable migration utility and provider-specific live compatibility test remain to be built.
 - Redis-backed rate limiting/session coordination, asynchronous AI jobs, observability, automated restore drills, and capacity testing remain future phases.
 
 ## Required Production Interfaces

@@ -6,21 +6,21 @@ import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.ResumeResponse;
 import com.offertracker.entity.Resume;
 import com.offertracker.mapper.ResumeMapper;
+import com.offertracker.storage.ResumeFileStorage;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.InputStream;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class ResumeService {
@@ -28,14 +28,14 @@ public class ResumeService {
     static final long MAX_SIZE_BYTES = 20L * 1024 * 1024;
     private final ResumeMapper resumeMapper;
     private final JobApplicationService applicationService;
-    private final Path resumeDirectory;
+    private final ResumeFileStorage storage;
 
     public ResumeService(ResumeMapper resumeMapper,
                          JobApplicationService applicationService,
-                         @Value("${offer-tracker.storage.resume-dir:./data/resumes}") String resumeDirectory) {
+                         ResumeFileStorage storage) {
         this.resumeMapper = resumeMapper;
         this.applicationService = applicationService;
-        this.resumeDirectory = Path.of(resumeDirectory).toAbsolutePath().normalize();
+        this.storage = storage;
     }
 
     @Transactional
@@ -44,26 +44,35 @@ public class ResumeService {
         if (applicationId != null) applicationService.getOrThrow(applicationId);
 
         String originalFilename = sanitizeFilename(file.getOriginalFilename());
-        Path storedFile = resumeDirectory.resolve(UUID.randomUUID() + ".pdf");
+        String extractedText;
+        byte[] content;
         try {
-            Files.createDirectories(resumeDirectory);
-            Files.copy(file.getInputStream(), storedFile, StandardCopyOption.REPLACE_EXISTING);
-            String extractedText = extractText(file.getBytes());
+            content = file.getBytes();
+            extractedText = extractText(content);
+        } catch (IOException ex) {
+            throw new BusinessException(400, "简历文件读取失败，请确认是有效的 PDF 文件");
+        }
+
+        String storedFile;
+        try {
+            storedFile = storage.store(content);
+        } catch (IOException | RuntimeException ex) {
+            throw new BusinessException(500, "简历文件保存失败，请稍后重试");
+        }
+        try {
             Resume resume = new Resume();
             if (CurrentUserContext.get() != null) resume.setOwnerId(CurrentUserContext.get().id());
             resume.setApplicationId(applicationId);
             resume.setOriginalFilename(originalFilename);
-            resume.setStoragePath(storedFile.toString());
+            resume.setStoragePath(storedFile);
             resume.setContentType("application/pdf");
             resume.setSizeBytes(file.getSize());
             resume.setExtractedText(extractedText);
             resume.setCreatedAt(LocalDateTime.now());
             resume.setUpdatedAt(LocalDateTime.now());
             resumeMapper.insert(resume);
+            cleanupUploadIfTransactionRollsBack(storedFile);
             return ResumeResponse.from(resume);
-        } catch (IOException ex) {
-            deleteQuietly(storedFile);
-            throw new BusinessException(400, "简历文件读取失败，请确认是有效的 PDF 文件");
         } catch (RuntimeException ex) {
             deleteQuietly(storedFile);
             throw ex;
@@ -89,7 +98,13 @@ public class ResumeService {
     public void delete(Long id) {
         Resume resume = getOrThrow(id);
         resumeMapper.deleteById(id);
-        deleteQuietly(Path.of(resume.getStoragePath()));
+        deleteFileAfterTransactionCommits(resume.getStoragePath());
+    }
+
+    public ResumeFile download(Long id) {
+        Resume resume = getOrThrow(id);
+        try { return new ResumeFile(resume, storage.load(resume.getStoragePath())); }
+        catch (IOException | RuntimeException ex) { throw new BusinessException(404, "简历文件不存在或暂时无法读取"); }
     }
 
     private void validate(MultipartFile file) {
@@ -115,7 +130,30 @@ public class ResumeService {
         return safe.isBlank() ? "resume.pdf" : safe;
     }
 
-    private void deleteQuietly(Path path) {
-        try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+    private void deleteQuietly(String locator) {
+        try { storage.delete(locator); } catch (IOException | RuntimeException ignored) { }
     }
+
+    private void cleanupUploadIfTransactionRollsBack(String locator) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) deleteQuietly(locator);
+            }
+        });
+    }
+
+    private void deleteFileAfterTransactionCommits(String locator) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            deleteQuietly(locator);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() { deleteQuietly(locator); }
+        });
+    }
+
+    public record ResumeFile(Resume resume, InputStream content) { }
 }

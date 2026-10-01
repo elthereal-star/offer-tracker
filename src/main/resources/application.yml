@@ -39,5 +39,6 @@ offer-tracker:
     required: ${AUTH_REQUIRED:false}
     config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY:local-development-only-ai-config-key-change-for-production}
   storage:
+    type: ${RESUME_STORAGE_TYPE:local}
     resume-dir: ${RESUME_STORAGE_DIR:./data/resumes}
     ai-config-file: ${AI_CONFIG_FILE:./data/ai-config.json}
