@@ -8,3 +8,4 @@ spring:
 offer-tracker:
   auth:
     jwt-secret: test-only-jwt-secret-at-least-32-characters
+    config-encryption-key: test-only-ai-config-encryption-key

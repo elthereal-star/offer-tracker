@@ -37,6 +37,7 @@ offer-tracker:
   auth:
     jwt-secret: ${JWT_SECRET}
     required: ${AUTH_REQUIRED:false}
+    config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY:${JWT_SECRET}}
   storage:
     resume-dir: ${RESUME_STORAGE_DIR:./data/resumes}
     ai-config-file: ${AI_CONFIG_FILE:./data/ai-config.json}
