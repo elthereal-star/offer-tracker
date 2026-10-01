@@ -25,7 +25,7 @@ This document records the rules for the productionization work. It is a baseline
 - Use a managed MySQL service. The default profile remains local H2.
 - Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
 - Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. A resumable migration utility and provider-specific live compatibility test remain to be built.
-- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Login/IP abuse controls, distributed session coordination, asynchronous AI jobs, observability, automated restore drills, and capacity testing remain future phases.
+- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production health probes and Prometheus metrics are exposed on a separate management port that must remain private. Login/IP abuse controls, distributed session coordination, asynchronous AI jobs, alerting/metrics dashboards, automated restore drills, and capacity testing remain future phases.
 
 ## Required Production Interfaces
 

@@ -21,6 +21,19 @@ spring:
       enabled: true
       path: /h2-console
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  health:
+    redis:
+      enabled: false
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
