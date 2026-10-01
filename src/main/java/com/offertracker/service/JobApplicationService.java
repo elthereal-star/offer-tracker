@@ -3,6 +3,7 @@ package com.offertracker.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.CreateApplicationRequest;
 import com.offertracker.dto.UpdateApplicationRequest;
 import com.offertracker.entity.InterviewRound;
@@ -37,6 +38,7 @@ public class JobApplicationService {
         String position = normalizePosition(request.position(), status);
 
         JobApplication application = new JobApplication();
+        if (CurrentUserContext.get() != null) application.setOwnerId(CurrentUserContext.get().id());
         application.setCompanyId(request.companyId());
         application.setPosition(position);
         application.setCity(request.city());
@@ -60,13 +62,17 @@ public class JobApplicationService {
         if (appliedFrom != null && appliedTo != null && appliedFrom.isAfter(appliedTo)) {
             throw new BusinessException(400, "投递开始日期不能晚于结束日期");
         }
-        return applicationMapper.selectFilteredPage(new Page<>(pageNum, pageSize), status, companyId,
+        Long ownerId = CurrentUserContext.get() == null ? null : CurrentUserContext.get().id();
+        return applicationMapper.selectFilteredPage(new Page<>(pageNum, pageSize), status, ownerId, companyId,
                 trimToNull(keyword), trimToNull(city), trimToNull(source), appliedFrom, appliedTo);
     }
 
     public JobApplication getOrThrow(Long id) {
         JobApplication application = applicationMapper.selectById(id);
         if (application == null) {
+            throw new BusinessException(404, "投递记录不存在: " + id);
+        }
+        if (CurrentUserContext.get() != null && !CurrentUserContext.get().id().equals(application.getOwnerId())) {
             throw new BusinessException(404, "投递记录不存在: " + id);
         }
         return application;

@@ -1,6 +1,7 @@
 package com.offertracker.service;
 
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.CreateCompanyRequest;
 import com.offertracker.dto.UpdateCompanyRequest;
 import com.offertracker.entity.Company;
@@ -29,6 +30,7 @@ public class CompanyService {
         String name = request.name().trim();
         ensureNameAvailable(name, null);
         Company company = new Company();
+        if (CurrentUserContext.get() != null) company.setOwnerId(CurrentUserContext.get().id());
         company.setName(name);
         company.setWebsite(trimToNull(request.website()));
         company.setNotes(trimToNull(request.notes()));
@@ -38,7 +40,9 @@ public class CompanyService {
     }
 
     public List<Company> listAll() {
-        return companyMapper.selectList(new LambdaQueryWrapper<Company>().orderByAsc(Company::getName));
+        LambdaQueryWrapper<Company> query = new LambdaQueryWrapper<Company>().orderByAsc(Company::getName);
+        if (CurrentUserContext.get() != null) query.eq(Company::getOwnerId, CurrentUserContext.get().id());
+        return companyMapper.selectList(query);
     }
 
     public Company update(Long id, UpdateCompanyRequest request) {
@@ -67,12 +71,17 @@ public class CompanyService {
         if (company == null) {
             throw new BusinessException(404, "公司不存在: " + id);
         }
+        if (CurrentUserContext.get() != null && !CurrentUserContext.get().id().equals(company.getOwnerId())) {
+            throw new BusinessException(404, "公司不存在: " + id);
+        }
         return company;
     }
 
     private void ensureNameAvailable(String name, Long excludedId) {
         String normalized = name.toLowerCase(Locale.ROOT);
-        boolean duplicate = companyMapper.selectList(null).stream()
+        LambdaQueryWrapper<Company> query = new LambdaQueryWrapper<>();
+        if (CurrentUserContext.get() != null) query.eq(Company::getOwnerId, CurrentUserContext.get().id());
+        boolean duplicate = companyMapper.selectList(query).stream()
                 .anyMatch(company -> !company.getId().equals(excludedId)
                         && company.getName().trim().toLowerCase(Locale.ROOT).equals(normalized));
         if (duplicate) {

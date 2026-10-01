@@ -2,6 +2,7 @@ package com.offertracker.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.ResumeResponse;
 import com.offertracker.entity.Resume;
 import com.offertracker.mapper.ResumeMapper;
@@ -49,6 +50,7 @@ public class ResumeService {
             Files.copy(file.getInputStream(), storedFile, StandardCopyOption.REPLACE_EXISTING);
             String extractedText = extractText(file.getBytes());
             Resume resume = new Resume();
+            if (CurrentUserContext.get() != null) resume.setOwnerId(CurrentUserContext.get().id());
             resume.setApplicationId(applicationId);
             resume.setOriginalFilename(originalFilename);
             resume.setStoragePath(storedFile.toString());
@@ -72,12 +74,14 @@ public class ResumeService {
         LambdaQueryWrapper<Resume> query = new LambdaQueryWrapper<Resume>()
                 .orderByDesc(Resume::getUpdatedAt);
         if (applicationId != null) query.eq(Resume::getApplicationId, applicationId);
+        if (CurrentUserContext.get() != null) query.eq(Resume::getOwnerId, CurrentUserContext.get().id());
         return resumeMapper.selectList(query).stream().map(ResumeResponse::from).toList();
     }
 
     public Resume getOrThrow(Long id) {
         Resume resume = resumeMapper.selectById(id);
         if (resume == null) throw new BusinessException(404, "简历不存在: " + id);
+        if (CurrentUserContext.get() != null && !CurrentUserContext.get().id().equals(resume.getOwnerId())) throw new BusinessException(404, "简历不存在: " + id);
         return resume;
     }
 
