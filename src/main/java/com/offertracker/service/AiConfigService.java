@@ -32,10 +32,14 @@ public class AiConfigService {
 
     public AiConfigService(ObjectMapper objectMapper, JdbcTemplate jdbc,
                            @Value("${offer-tracker.storage.ai-config-file:./data/ai-config.json}") String configPath,
-                           @Value("${offer-tracker.auth.config-encryption-key}") String encryptionSecret) {
+                           @Value("${offer-tracker.auth.config-encryption-key}") String encryptionSecret,
+                           @Value("${offer-tracker.auth.required:false}") boolean authRequired) {
         this.objectMapper = objectMapper; this.jdbc = jdbc;
         this.configPath = Path.of(configPath).toAbsolutePath().normalize();
         if (encryptionSecret == null || encryptionSecret.length() < 32) throw new IllegalArgumentException("AI_CONFIG_ENCRYPTION_KEY must be at least 32 characters");
+        if (authRequired && encryptionSecret.startsWith("local-development-only-")) {
+            throw new IllegalArgumentException("AI_CONFIG_ENCRYPTION_KEY must be explicitly configured when authentication is required");
+        }
         try { this.encryptionKey = new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(encryptionSecret.getBytes(StandardCharsets.UTF_8)), "AES"); }
         catch (Exception ex) { throw new IllegalStateException("AI 配置加密密钥初始化失败", ex); }
     }

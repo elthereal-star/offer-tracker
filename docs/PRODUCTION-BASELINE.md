@@ -18,9 +18,10 @@ This document records the rules for the productionization work. It is a baseline
 
 ## Current Production Gaps
 
-- Set `AUTH_REQUIRED=true` for public deployments. It defaults to `false` for desktop/local compatibility.
-- Provide independent secrets `JWT_SECRET` and `AI_CONFIG_ENCRYPTION_KEY`, each at least 32 characters. The encryption key must be backed up and kept stable; rotating it requires re-encrypting stored AI credentials.
-- Use the MySQL profile and a managed MySQL service. The default profile remains local H2.
+- Start public deployments with `--spring.profiles.active=mysql,production`. The `production` profile requires DB credentials and both independent secrets, and forces authentication unless explicitly overridden.
+- Provide independent secrets `JWT_SECRET` and `AI_CONFIG_ENCRYPTION_KEY`, each at least 32 characters. The encryption key must be backed up and kept stable; rotating it requires re-encrypting stored AI credentials. The fallback values in the default profile are local-only and must never be used publicly.
+- Complete the legacy ownership cutover before enabling public access: records created before owner IDs were introduced have `owner_id IS NULL`, and authenticated queries intentionally hide them. Assign historical rows to the verified migration account in a controlled maintenance step; never auto-claim them for the first registrant.
+- Use a managed MySQL service. The default profile remains local H2.
 - Resume files still use local disk and are not safe for multi-instance deployments; object storage is not implemented yet.
 - Redis-backed rate limiting/session coordination, asynchronous AI jobs, observability, automated restore drills, and capacity testing remain future phases.
 

@@ -35,9 +35,9 @@ springdoc:
 
 offer-tracker:
   auth:
-    jwt-secret: ${JWT_SECRET}
+    jwt-secret: ${JWT_SECRET:local-development-only-jwt-secret-change-for-production}
     required: ${AUTH_REQUIRED:false}
-    config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY}
+    config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY:local-development-only-ai-config-key-change-for-production}
   storage:
     resume-dir: ${RESUME_STORAGE_DIR:./data/resumes}
     ai-config-file: ${AI_CONFIG_FILE:./data/ai-config.json}

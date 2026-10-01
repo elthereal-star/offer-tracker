@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class JwtTokenServiceTest {
-    private final JwtTokenService tokens = new JwtTokenService(new ObjectMapper(), "test-only-jwt-secret-at-least-32-characters");
+    private final JwtTokenService tokens = new JwtTokenService(new ObjectMapper(), "test-only-jwt-secret-at-least-32-characters", false);
 
     @Test
     void signsAndVerifiesAccessToken() {
@@ -24,5 +24,11 @@ class JwtTokenServiceTest {
         String token = tokens.createAccessToken(42L, "USER");
         String tampered = token.substring(0, token.length() - 1) + (token.endsWith("a") ? "b" : "a");
         assertThrows(BusinessException.class, () -> tokens.verify(tampered));
+    }
+
+    @Test
+    void rejectsLocalFallbackSecretWhenAuthenticationIsRequired() {
+        assertThrows(IllegalArgumentException.class, () -> new JwtTokenService(new ObjectMapper(),
+                "local-development-only-jwt-secret-change-for-production", true));
     }
 }

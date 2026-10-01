@@ -166,6 +166,16 @@ docker run --name offer-tracker -p 8080:8080 \
 
 数据卷 `offer-tracker-data` 对应容器内的 `/app/data`。删除容器不会删除该卷；需要备份时应单独备份此卷。
 
+## 公网生产启动
+
+公网部署必须使用 MySQL 与 `production` profile。先在密钥管理系统中配置独立的 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`JWT_SECRET` 和 `AI_CONFIG_ENCRYPTION_KEY`；两个密钥至少 32 个字符，AI 加密密钥需备份并保持稳定。生产 profile 默认启用强制认证：
+
+```bash
+java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
+```
+
+不要在公网部署中使用默认 H2、本地 JWT/加密密钥或本地简历目录。当前简历文件仍在实例本地磁盘，因此在对象存储接入完成前，本版本不适合运行多个无共享磁盘的应用实例。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
+
 ## API 一览
 
 | 方法 | 路径 | 说明 |

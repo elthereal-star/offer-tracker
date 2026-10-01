@@ -18,8 +18,12 @@ public class JwtTokenService {
     private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
     private final ObjectMapper objectMapper; private final byte[] secret;
-    public JwtTokenService(ObjectMapper objectMapper, @Value("${offer-tracker.auth.jwt-secret}") String secret) {
+    public JwtTokenService(ObjectMapper objectMapper, @Value("${offer-tracker.auth.jwt-secret}") String secret,
+                           @Value("${offer-tracker.auth.required:false}") boolean authRequired) {
         if (secret == null || secret.length() < 32) throw new IllegalArgumentException("JWT_SECRET must be at least 32 characters");
+        if (authRequired && secret.startsWith("local-development-only-")) {
+            throw new IllegalArgumentException("JWT_SECRET must be explicitly configured when authentication is required");
+        }
         this.objectMapper = objectMapper; this.secret = secret.getBytes(StandardCharsets.UTF_8);
     }
     public String createAccessToken(Long userId, String role) {
