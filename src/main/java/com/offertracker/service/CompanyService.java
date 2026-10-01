@@ -81,10 +81,9 @@ public class CompanyService {
         String normalized = name.toLowerCase(Locale.ROOT);
         LambdaQueryWrapper<Company> query = new LambdaQueryWrapper<>();
         if (CurrentUserContext.get() != null) query.eq(Company::getOwnerId, CurrentUserContext.get().id());
-        boolean duplicate = companyMapper.selectList(query).stream()
-                .anyMatch(company -> !company.getId().equals(excludedId)
-                        && company.getName().trim().toLowerCase(Locale.ROOT).equals(normalized));
-        if (duplicate) {
+        query.apply("LOWER(TRIM(name)) = {0}", normalized);
+        if (excludedId != null) query.ne(Company::getId, excludedId);
+        if (companyMapper.selectCount(query) > 0) {
             throw new BusinessException(409, "公司名称已存在: " + name);
         }
     }
