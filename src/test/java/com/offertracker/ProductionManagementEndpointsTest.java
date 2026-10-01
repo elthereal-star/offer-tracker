@@ -56,5 +56,11 @@ class ProductionManagementEndpointsTest {
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("jvm_memory_used_bytes")));
+
+        mockMvc.perform(get("/api/companies"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("X-Request-Id", org.hamcrest.Matchers.matchesPattern(
+                                "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")));
     }
 }

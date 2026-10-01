@@ -39,6 +39,8 @@ Every externally reachable interface must define:
 - Error codes safe for clients and logs safe for sensitive data.
 - Expected latency and timeout behavior where an external provider is involved.
 
+Each HTTP response includes an `X-Request-Id` UUID. The same value is attached to application log lines for that request; preserve it when reporting a failure. Only UUID-formatted caller values are accepted, and request bodies, credentials, and AI prompts must not be logged.
+
 ## Configuration Rules
 
 - Non-secret defaults belong in version-controlled configuration.
