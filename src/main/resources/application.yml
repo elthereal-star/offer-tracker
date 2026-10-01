@@ -47,6 +47,9 @@ springdoc:
     path: /swagger-ui.html
 
 offer-tracker:
+  ai:
+    connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
+    request-timeout: ${AI_REQUEST_TIMEOUT:90s}
   auth:
     jwt-secret: ${JWT_SECRET:local-development-only-jwt-secret-change-for-production}
     required: ${AUTH_REQUIRED:false}

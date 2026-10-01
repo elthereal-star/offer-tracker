@@ -45,6 +45,7 @@ Every externally reachable interface must define:
 - Secrets belong in a secret manager or encrypted deployment secret, never in source, images, logs, exports, or frontend assets.
 - Environment-specific configuration must be explicit and validated at startup.
 - Database URLs, object storage endpoints, queue endpoints, and AI provider credentials must be independently configurable.
+- AI provider connection and request timeouts are configurable through `AI_CONNECT_TIMEOUT` and `AI_REQUEST_TIMEOUT`; keep the request timeout bounded and do not add blind retries to billable POST requests.
 - Local H2 and local filesystem storage are development/desktop options, not the public multi-user production default.
 
 ## Local Resume Migration

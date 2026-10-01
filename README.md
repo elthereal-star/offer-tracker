@@ -174,7 +174,7 @@ docker run --name offer-tracker -p 8080:8080 \
 java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
 ```
 
-生产实例的业务端口为 `8080`，管理端口默认为 `8081`（可用 `MANAGEMENT_PORT` 修改）。负载均衡器使用 `/actuator/health/readiness` 检查就绪，`/actuator/health/liveness` 用于存活检查；Prometheus 从 `/actuator/prometheus` 抓取指标。管理端口只应对负载均衡器、编排平台和监控网络开放，不应映射到公网。
+生产实例的业务端口为 `8080`，管理端口默认为 `8081`（可用 `MANAGEMENT_PORT` 修改）。负载均衡器使用 `/actuator/health/readiness` 检查就绪，`/actuator/health/liveness` 用于存活检查；Prometheus 从 `/actuator/prometheus` 抓取指标。管理端口只应对负载均衡器、编排平台和监控网络开放，不应映射到公网。AI 请求超时可用 `AI_CONNECT_TIMEOUT` 和 `AI_REQUEST_TIMEOUT` 调整，默认分别为 10 秒和 90 秒；项目不会自动重试计费的 AI POST 请求。
 
 不要在公网部署中使用默认 H2 或本地 JWT/加密密钥。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
 
