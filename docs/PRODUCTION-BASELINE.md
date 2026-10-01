@@ -20,7 +20,7 @@ This document records the rules for the productionization work. It is a baseline
 
 - Start public deployments with `--spring.profiles.active=mysql,production`. The `production` profile requires MySQL and Redis credentials plus both independent secrets, and forces authentication unless explicitly overridden.
 - Provide independent secrets `JWT_SECRET` and `AI_CONFIG_ENCRYPTION_KEY`, each at least 32 characters. The encryption key must be backed up and kept stable; rotating it requires re-encrypting stored AI credentials. The fallback values in the default profile are local-only and must never be used publicly.
-- Complete the legacy ownership cutover before enabling public access: records created before owner IDs were introduced have `owner_id IS NULL`, and authenticated queries intentionally hide them. Assign historical rows to the verified migration account in a controlled maintenance step; never auto-claim them for the first registrant.
+- Complete the legacy ownership cutover before enabling public access: records created before owner IDs were introduced have `owner_id IS NULL`, and authenticated queries intentionally hide them. The controlled migration runner supports a default dry-run and explicit `--apply` for a verified active account; never auto-claim them for the first registrant.
 - Registration is not production-ready until a cloud `SmsCodeSender` adapter is selected and supplied with the `sms-cloud` profile. The local logging adapter is disabled under `production`; without a provider the verification-code endpoint returns 503 and does not log codes.
 - Use a managed MySQL service. The default profile remains local H2.
 - Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
@@ -70,6 +70,20 @@ java -jar target/offer-tracker-0.1.0.jar \
 ```
 
 The command accepts only regular files under `RESUME_STORAGE_DIR`, rejects files over 20 MiB, processes records in bounded pages, and emits record IDs and exception types only. S3 keys are deterministic (`<S3_PREFIX>/legacy/<resume-id>.pdf`), so rerunning after an interrupted upload safely overwrites the same object. A database locator is updated only if it still matches the scanned local locator. Local files are deliberately retained; verify downloads against the destination provider and complete backups before any separate cleanup. A successful command is not proof of provider compatibility or a restore test.
+
+## Legacy Ownership Cutover
+
+Create or verify the target account out of band, stop application writes, back up MySQL, and run a dry-run first:
+
+```sh
+java -jar target/offer-tracker-0.1.0.jar \
+  --spring.profiles.active=mysql,production \
+  --spring.main.web-application-type=none \
+  --offer-tracker.ownership-migration.enabled=true \
+  --owner-id=123
+```
+
+Review the per-table counts, then repeat with `--apply` during the cutover window. The command only updates rows whose `owner_id` is still `NULL` in `companies`, `job_applications`, `resumes`, and `ai_interview_sessions`; it never changes already-owned records and never infers an owner from registration order. Verify authenticated access and the backup before reopening traffic.
 
 ## Phase 0 Exit Criteria
 
