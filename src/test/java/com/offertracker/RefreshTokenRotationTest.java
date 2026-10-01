@@ -9,6 +9,7 @@ import com.offertracker.mapper.AuthRefreshSessionMapper;
 import com.offertracker.mapper.UserMapper;
 import com.offertracker.mapper.VerificationCodeMapper;
 import com.offertracker.service.IdentityService;
+import com.offertracker.service.LoginAttemptLimiter;
 import com.offertracker.service.JwtTokenService;
 import com.offertracker.service.SmsCodeSender;
 import com.offertracker.service.SmsRequestLimiter;
@@ -47,7 +48,7 @@ class RefreshTokenRotationTest {
         when(sessions.update(isNull(), any())).thenReturn(0);
 
         IdentityService identity = new IdentityService(users, sessions, mock(VerificationCodeMapper.class),
-                mock(VerificationCodeAttemptService.class), mock(SmsRequestLimiter.class), mock(SmsCodeSender.class),
+                mock(VerificationCodeAttemptService.class), mock(SmsRequestLimiter.class), mock(LoginAttemptLimiter.class), mock(SmsCodeSender.class),
                 new JwtTokenService(new ObjectMapper(), "test-jwt-secret-with-at-least-32-characters", false));
 
         BusinessException error = assertThrows(BusinessException.class,
