@@ -35,6 +35,7 @@ public class AiConfigService {
                            @Value("${offer-tracker.auth.config-encryption-key}") String encryptionSecret) {
         this.objectMapper = objectMapper; this.jdbc = jdbc;
         this.configPath = Path.of(configPath).toAbsolutePath().normalize();
+        if (encryptionSecret == null || encryptionSecret.length() < 32) throw new IllegalArgumentException("AI_CONFIG_ENCRYPTION_KEY must be at least 32 characters");
         try { this.encryptionKey = new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(encryptionSecret.getBytes(StandardCharsets.UTF_8)), "AES"); }
         catch (Exception ex) { throw new IllegalStateException("AI 配置加密密钥初始化失败", ex); }
     }
