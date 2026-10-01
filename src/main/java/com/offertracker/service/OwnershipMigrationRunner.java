@@ -7,7 +7,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 
@@ -19,8 +19,13 @@ public class OwnershipMigrationRunner implements ApplicationRunner {
             "companies", "job_applications", "resumes", "ai_interview_sessions");
     private final JdbcTemplate jdbc;
     private final UserMapper users;
+    private final TransactionTemplate transactions;
 
-    public OwnershipMigrationRunner(JdbcTemplate jdbc, UserMapper users) { this.jdbc = jdbc; this.users = users; }
+    public OwnershipMigrationRunner(JdbcTemplate jdbc, UserMapper users, TransactionTemplate transactions) {
+        this.jdbc = jdbc;
+        this.users = users;
+        this.transactions = transactions;
+    }
 
     @Override
     public void run(ApplicationArguments args) {
@@ -37,9 +42,12 @@ public class OwnershipMigrationRunner implements ApplicationRunner {
                 counts.stream().map(RowCount::toString).reduce((a, b) -> a + "," + b).orElse("none"), total);
     }
 
-    @Transactional
-    protected void apply(Long ownerId) {
-        for (String table : TABLES) jdbc.update("UPDATE " + table + " SET owner_id = ? WHERE owner_id IS NULL", ownerId);
+    private void apply(Long ownerId) {
+        transactions.executeWithoutResult(status -> {
+            for (String table : TABLES) {
+                jdbc.update("UPDATE " + table + " SET owner_id = ? WHERE owner_id IS NULL", ownerId);
+            }
+        });
     }
 
     private int countUnowned(String table) {
