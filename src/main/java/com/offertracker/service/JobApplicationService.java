@@ -79,6 +79,7 @@ public class JobApplicationService {
     }
 
     public void lockOrThrow(Long id) {
+        getOrThrow(id);
         if (applicationMapper.selectIdForUpdate(id) == null) {
             throw new BusinessException(404, "投递记录不存在: " + id);
         }
