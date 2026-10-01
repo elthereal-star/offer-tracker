@@ -3,6 +3,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.*;
 import com.offertracker.entity.*;
 import com.offertracker.mapper.*;
@@ -20,14 +21,15 @@ public class AiInterviewService {
   String roleContext=application==null?"":"\n目标岗位：公司="+companies.getOrThrow(application.getCompanyId()).getName()+"，岗位="+application.getPosition()+"，城市="+valueOrUnknown(application.getCity())+"，薪资="+valueOrUnknown(application.getSalaryRange());
   String prompt="你是一名专业技术面试官。请根据候选人简历和目标岗位生成第一道个性化面试题。只返回题目本身，不要编号、不要解释。"+roleContext+"\n简历：\n"+context;
   String content=ai.chat(List.of(new AiChatMessage("system","你负责设计严谨、友好的求职面试题。"),new AiChatMessage("user",prompt)));
-  AiInterviewSession session=new AiInterviewSession(); session.setResumeId(req.resumeId()); session.setApplicationId(req.applicationId()); session.setStatus("ACTIVE"); session.setCreatedAt(LocalDateTime.now()); session.setUpdatedAt(LocalDateTime.now()); sessions.insert(session);
+  AiInterviewSession session=new AiInterviewSession(); if(CurrentUserContext.get()!=null) session.setOwnerId(CurrentUserContext.get().id()); session.setResumeId(req.resumeId()); session.setApplicationId(req.applicationId()); session.setStatus("ACTIVE"); session.setCreatedAt(LocalDateTime.now()); session.setUpdatedAt(LocalDateTime.now()); sessions.insert(session);
   AiInterviewQuestion question=new AiInterviewQuestion(); question.setSessionId(session.getId()); question.setQuestionNo(1); question.setContent(content.trim()); question.setCreatedAt(LocalDateTime.now()); questions.insert(question);
   return get(session.getId());
  }
- public AiInterviewSessionResponse get(Long id){ AiInterviewSession s=sessions.selectById(id); if(s==null) throw new BusinessException(404,"AI 面试会话不存在: "+id); List<AiInterviewQuestionResponse> qs=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,id).orderByAsc(AiInterviewQuestion::getQuestionNo)).stream().map(q->new AiInterviewQuestionResponse(q.getId(),q.getQuestionNo(),q.getContent(),q.getAnswer(),q.getScore(),q.getFeedback())).toList(); return new AiInterviewSessionResponse(s.getId(),s.getResumeId(),s.getApplicationId(),s.getStatus(),s.getAverageScore(),s.getReport(),qs); }
+ public AiInterviewSessionResponse get(Long id){ AiInterviewSession s=sessions.selectById(id); if(s==null || !ownedByCurrentUser(s)) throw new BusinessException(404,"AI 面试会话不存在: "+id); List<AiInterviewQuestionResponse> qs=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,id).orderByAsc(AiInterviewQuestion::getQuestionNo)).stream().map(q->new AiInterviewQuestionResponse(q.getId(),q.getQuestionNo(),q.getContent(),q.getAnswer(),q.getScore(),q.getFeedback())).toList(); return new AiInterviewSessionResponse(s.getId(),s.getResumeId(),s.getApplicationId(),s.getStatus(),s.getAverageScore(),s.getReport(),qs); }
  public List<AiInterviewSessionResponse> list(Long resumeId){
   LambdaQueryWrapper<AiInterviewSession> wrapper=new LambdaQueryWrapper<AiInterviewSession>().orderByDesc(AiInterviewSession::getUpdatedAt);
   if(resumeId!=null) wrapper.eq(AiInterviewSession::getResumeId,resumeId);
+  if(CurrentUserContext.get()!=null) wrapper.eq(AiInterviewSession::getOwnerId, CurrentUserContext.get().id());
   return sessions.selectList(wrapper).stream().map(s->get(s.getId())).toList();
  }
  @Transactional public AiInterviewSessionResponse answer(Long sessionId, Long questionId, SubmitAiInterviewAnswerRequest req){
@@ -69,8 +71,12 @@ public class AiInterviewService {
   AiInterviewQuestion next=new AiInterviewQuestion(); next.setSessionId(sessionId); next.setQuestionNo(nextNo); next.setContent(content.trim()); next.setCreatedAt(LocalDateTime.now()); questions.insert(next); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); return get(sessionId);
  }
  private AiInterviewSession lockSessionOrThrow(Long id){
-  if(sessions.selectIdForUpdate(id)==null) throw new BusinessException(404,"AI 面试会话不存在: "+id);
+  Long ownerId=CurrentUserContext.get()==null?null:CurrentUserContext.get().id();
+  if(sessions.selectIdForUpdate(id, ownerId)==null) throw new BusinessException(404,"AI 面试会话不存在: "+id);
   return sessions.selectById(id);
+ }
+ private boolean ownedByCurrentUser(AiInterviewSession session){
+  return CurrentUserContext.get()==null || CurrentUserContext.get().id().equals(session.getOwnerId());
  }
  private void ensureActive(AiInterviewSession session){
   if(!"ACTIVE".equals(session.getStatus())) throw new BusinessException(409,"AI 面试会话已结束");
