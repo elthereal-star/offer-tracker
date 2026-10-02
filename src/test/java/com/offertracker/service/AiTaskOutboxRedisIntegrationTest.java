@@ -184,6 +184,38 @@ class AiTaskOutboxRedisIntegrationTest {
         assertEquals("provider request timed out", deadLetters.get(0).getValue().get("error"));
     }
 
+    @Test
+    void providerTimeoutIsRetriedOnlyThroughOutboxAndStopsAtAttemptLimit() {
+        redis.delete(RedisAiTaskQueue.STREAM);
+        redis.delete("offer-tracker:ai-tasks:dead-letter");
+        User user = user();
+        AiTask task = task(user);
+        AiInterviewService interviews = mock(AiInterviewService.class);
+        when(interviews.create(any(CreateAiInterviewRequest.class)))
+                .thenThrow(new IllegalStateException("provider request timed out"));
+        RedisAiTaskWorker worker = new RedisAiTaskWorker(redis, tasks, interviews, new ObjectMapper(), metrics);
+        worker.ensureGroup();
+        AiTaskOutboxDispatcher dispatcher = new AiTaskOutboxDispatcher(tasks,
+                new RedisAiTaskQueue(redis, metrics), Duration.ofMinutes(1));
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            dispatcher.dispatchPending();
+            List<MapRecord<String, Object, Object>> published = readStream();
+            worker.process(published.get(published.size() - 1));
+            AiTask current = tasks.selectById(task.getId());
+            assertEquals(attempt, current.getAttempts());
+            assertEquals(attempt == 3 ? "FAILED" : "PENDING", current.getStatus());
+            assertNull(current.getLeaseUntil());
+        }
+
+        verify(interviews, times(3)).create(any(CreateAiInterviewRequest.class));
+        List<MapRecord<String, Object, Object>> deadLetters = redis.opsForStream().read(
+                StreamOffset.fromStart("offer-tracker:ai-tasks:dead-letter"));
+        assertEquals(1, deadLetters.size());
+        assertEquals(task.getId().toString(), deadLetters.get(0).getValue().get("taskId"));
+        assertEquals("provider request timed out", deadLetters.get(0).getValue().get("error"));
+    }
+
     private List<MapRecord<String, Object, Object>> readStream() {
         return redis.opsForStream().read(StreamOffset.fromStart(RedisAiTaskQueue.STREAM));
     }
