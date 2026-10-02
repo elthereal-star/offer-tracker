@@ -15,6 +15,6 @@ Add one implementation in the deployment module or a private integration module 
 - map provider rejection/rate-limit/unavailability to a stable `BusinessException` response;
 - expose provider request IDs only in correlation-safe structured logs, without credentials or message content.
 
-When `production` is active without a cloud adapter, the built-in fallback keeps the application safe and returns HTTP 503 for verification-code sends. This is intentional: it prevents accidental use of the development logging sender. Activating `sms-cloud` without supplying an implementation has the same safe behavior, so a vendor integration can be added independently.
+When `production` is active without a cloud adapter, the built-in fallback keeps the application safe and returns HTTP 503 for verification-code sends. This is intentional: it prevents accidental use of the development logging sender. The `sms-cloud` profile must only be activated together with a concrete `SmsCodeSender` implementation; otherwise startup fails fast instead of exposing a partially configured registration flow.
 
 Before go-live, test successful delivery, invalid template/signature, provider timeout, provider rate limiting, duplicate requests, and secret rotation in a non-production account.

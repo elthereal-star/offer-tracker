@@ -2,12 +2,10 @@ package com.offertracker.service;
 
 import com.offertracker.common.BusinessException;
 import org.springframework.context.annotation.Profile;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("production")
-@ConditionalOnMissingBean(SmsCodeSender.class)
+@Profile("production & !sms-cloud")
 public class UnavailableProductionSmsCodeSender implements SmsCodeSender {
     @Override
     public void send(String phone, String code) {
