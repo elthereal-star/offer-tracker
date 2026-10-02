@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -117,6 +118,70 @@ class AiTaskOutboxRedisIntegrationTest {
         AiTask completed = tasks.selectById(task.getId());
         assertEquals("SUCCEEDED", completed.getStatus());
         assertEquals(1, completed.getAttempts());
+    }
+
+    @Test
+    void expiredWorkerLeaseIsRepublishedAndCanBeProcessedAgain() {
+        redis.delete(RedisAiTaskQueue.STREAM);
+        User user = user();
+        AiTask task = task(user);
+        task.setStatus("PROCESSING");
+        task.setDispatchStatus("PUBLISHED");
+        task.setAttempts(1);
+        task.setLeaseUntil(LocalDateTime.now().minusMinutes(1));
+        tasks.updateById(task);
+
+        AiInterviewService interviews = mock(AiInterviewService.class);
+        when(interviews.create(any(CreateAiInterviewRequest.class))).thenReturn(
+                new AiInterviewSessionResponse(100L, 7L, null, "ACTIVE", null, null, List.of()));
+        RedisAiTaskWorker worker = new RedisAiTaskWorker(redis, tasks, interviews, new ObjectMapper(), metrics);
+
+        worker.recoverExpiredLeases();
+
+        AiTask recovered = tasks.selectById(task.getId());
+        assertEquals("PENDING", recovered.getStatus());
+        assertEquals("NEW", recovered.getDispatchStatus());
+        assertNull(recovered.getLeaseUntil());
+
+        new AiTaskOutboxDispatcher(tasks, new RedisAiTaskQueue(redis, metrics), Duration.ofMinutes(1))
+                .dispatchPending();
+        List<MapRecord<String, Object, Object>> redelivered = readStream();
+        assertEquals(1, redelivered.size());
+        worker.process(redelivered.get(0));
+
+        AiTask completed = tasks.selectById(task.getId());
+        assertEquals("SUCCEEDED", completed.getStatus());
+        assertEquals(2, completed.getAttempts());
+        verify(interviews, times(1)).create(any(CreateAiInterviewRequest.class));
+    }
+
+    @Test
+    void expiredLeaseAtRetryLimitIsFailedAndWrittenToDeadLetterStream() {
+        redis.delete(RedisAiTaskQueue.STREAM);
+        redis.delete("offer-tracker:ai-tasks:dead-letter");
+        User user = user();
+        AiTask task = task(user);
+        task.setStatus("PROCESSING");
+        task.setDispatchStatus("PUBLISHED");
+        task.setAttempts(3);
+        task.setLeaseUntil(LocalDateTime.now().minusMinutes(1));
+        task.setErrorMessage("provider request timed out");
+        tasks.updateById(task);
+
+        RedisAiTaskWorker worker = new RedisAiTaskWorker(redis, tasks,
+                mock(AiInterviewService.class), new ObjectMapper(), metrics);
+
+        worker.recoverExpiredLeases();
+
+        AiTask failed = tasks.selectById(task.getId());
+        assertEquals("FAILED", failed.getStatus());
+        assertEquals("PUBLISHED", failed.getDispatchStatus());
+        assertNull(failed.getLeaseUntil());
+        List<MapRecord<String, Object, Object>> deadLetters = redis.opsForStream().read(
+                StreamOffset.fromStart("offer-tracker:ai-tasks:dead-letter"));
+        assertEquals(1, deadLetters.size());
+        assertEquals(task.getId().toString(), deadLetters.get(0).getValue().get("taskId"));
+        assertEquals("provider request timed out", deadLetters.get(0).getValue().get("error"));
     }
 
     private List<MapRecord<String, Object, Object>> readStream() {
