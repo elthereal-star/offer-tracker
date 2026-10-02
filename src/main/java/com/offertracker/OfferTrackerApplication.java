@@ -7,10 +7,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationListener;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import com.offertracker.config.TrustedProxyProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @MapperScan("com.offertracker.mapper")
 @EnableConfigurationProperties(TrustedProxyProperties.class)
+@EnableScheduling
 public class OfferTrackerApplication {
 
     public static void main(String[] args) {
