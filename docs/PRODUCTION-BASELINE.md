@@ -33,7 +33,7 @@ No phase claims a million-user capacity target. Establish the supported workload
 
 ## Current Production Gaps
 
-- Start public deployments with `--spring.profiles.active=mysql,production`. The `production` profile requires MySQL and Redis credentials plus both independent secrets, and forces authentication unless explicitly overridden.
+- Start public deployments with `--spring.profiles.active=mysql,production`. The `production` profile requires MySQL and Redis credentials plus both independent secrets, and fails startup if authentication is disabled by any configuration source.
 - Provide independent secrets `JWT_SECRET` and `AI_CONFIG_ENCRYPTION_KEY`, each at least 32 characters. The encryption key must be backed up and kept stable; rotating it requires re-encrypting stored AI credentials. The fallback values in the default profile are local-only and must never be used publicly.
 - Complete the legacy ownership cutover before enabling public access: records created before owner IDs were introduced have `owner_id IS NULL`, and authenticated queries intentionally hide them. The controlled migration runner supports a default dry-run and explicit `--apply` for a verified active account; never auto-claim them for the first registrant.
 - Registration is not production-ready until a cloud `SmsCodeSender` adapter is selected and supplied with the `sms-cloud` profile. The local logging adapter is disabled under `production`; without a provider the verification-code endpoint returns 503 and does not log codes.

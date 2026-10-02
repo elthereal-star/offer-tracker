@@ -1,5 +1,6 @@
 package com.offertracker;
 
+import com.offertracker.config.ProductionAuthenticationGuard;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -39,6 +40,9 @@ class ProductionManagementEndpointsTest {
 
     @Test
     void exposesSafeProbeGroupsAndPrometheusOnlyInProductionProfile() throws Exception {
+        org.junit.jupiter.api.Assertions.assertTrue(
+                context.getBeanNamesForType(ProductionAuthenticationGuard.class).length > 0,
+                "Production authentication guard was not configured");
         org.junit.jupiter.api.Assertions.assertEquals("health,prometheus",
                 environment.getProperty("management.endpoints.web.exposure.include"));
         org.junit.jupiter.api.Assertions.assertTrue(context.getBeanNamesForType(PrometheusScrapeEndpoint.class).length > 0,
