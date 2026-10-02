@@ -16,25 +16,21 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.net.URI;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers(disabledWithoutDocker = true)
-class S3ResumeFileStorageMinioIntegrationTest {
+class S3ResumeFileStorageS3MockIntegrationTest {
     private static final String BUCKET = "offer-tracker-test";
-    private static final String ACCESS_KEY = "offer-test-access";
-    private static final String SECRET_KEY = "offer-test-secret-key";
     private static final String PREFIX = "offer-tracker/resumes";
 
     @Container
-    static final GenericContainer<?> MINIO = new GenericContainer<>(
-            DockerImageName.parse("quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z"))
-            .withEnv("MINIO_ROOT_USER", ACCESS_KEY)
-            .withEnv("MINIO_ROOT_PASSWORD", SECRET_KEY)
-            .withCommand("server", "/data")
-            .withExposedPorts(9000);
+    static final GenericContainer<?> S3_MOCK = new GenericContainer<>(
+            DockerImageName.parse("adobe/s3mock:5.2.3"))
+            .withExposedPorts(9090);
 
     @Test
     void storesLoadsAndDeletesObjectsUsingS3CompatibleApi() throws Exception {
@@ -64,10 +60,9 @@ class S3ResumeFileStorageMinioIntegrationTest {
 
     private S3Client client() {
         return S3Client.builder()
-                .endpointOverride(URI.create("http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000)))
+                .endpointOverride(URI.create("http://" + S3_MOCK.getHost() + ":" + S3_MOCK.getMappedPort(9090)))
                 .region(Region.US_EAST_1)
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(ACCESS_KEY, SECRET_KEY)))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("foo", "bar")))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
     }
