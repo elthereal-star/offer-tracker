@@ -47,6 +47,18 @@ class AiTaskServiceTest {
         assertThrows(BusinessException.class, () -> tasks.get(created.id()));
     }
 
+    @Test
+    void rejectsUnsupportedTaskTypesAndInvalidPayloadsBeforePersistence() {
+        User owner = user("+8613800099003");
+        CurrentUserContext.set(new CurrentUser(owner.getId(), "USER"));
+
+        assertThrows(BusinessException.class, () -> tasks.submit("UNKNOWN", "bad-type", java.util.Map.of()));
+        assertThrows(BusinessException.class, () -> tasks.submit("GENERATE_QUESTION", "bad-id", java.util.Map.of("resumeId", 0)));
+        assertThrows(BusinessException.class, () -> tasks.submit("FINISH_INTERVIEW", "extra", java.util.Map.of("sessionId", 1, "prompt", "unexpected")));
+        assertThrows(BusinessException.class, () -> tasks.submit("FINISH_INTERVIEW", "x".repeat(129), java.util.Map.of("sessionId", 1)));
+        assertThrows(BusinessException.class, () -> tasks.submit("FINISH_INTERVIEW", "large", java.util.Map.of("sessionId", "x".repeat(5000))));
+    }
+
     private User user(String phone) {
         User user = new User(); user.setPhone(phone); user.setPasswordHash("unused");
         user.setRole("USER"); user.setStatus("ACTIVE"); user.setCreatedAt(LocalDateTime.now()); user.setUpdatedAt(LocalDateTime.now());

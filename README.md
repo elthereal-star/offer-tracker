@@ -184,7 +184,7 @@ Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts
 
 只读容量测试基线见 [k6 容量测试说明](docs/ops/capacity-test.md)，默认不写入业务数据、不发送短信、不调用计费 AI 接口。
 
-异步 AI 任务通过 `POST /api/ai/tasks` 提交，通过 `GET /api/ai/tasks/{id}` 查询；请求必须携带登录令牌和调用方生成的幂等键。生产 worker 使用 Redis Streams，任务状态以 MySQL 为准，失败任务会有限重试并进入死信流。
+异步 AI 任务通过 `POST /api/ai/tasks` 提交，通过 `GET /api/ai/tasks/{id}` 查询；请求必须携带登录令牌和调用方生成的幂等键（最多 128 个字符）。目前支持 `GENERATE_QUESTION`（`resumeId`，可选 `applicationId`）、`EVALUATE_ANSWER` / `FOLLOW_UP`（`sessionId`、`questionId`）和 `FINISH_INTERVIEW`（`sessionId`）；所有 ID 必须为正整数，payload 仅允许对应字段且不超过 4 KiB。生产 worker 使用 Redis Streams，任务状态以 MySQL 为准，失败任务会有限重试并进入死信流。
 
 应用还会对 `/api/auth/**` 执行共享 Redis IP 限流（默认每个客户端 IP 每分钟 60 次）。如果应用位于反向代理后面，请通过 `TRUSTED_PROXY_CIDRS` 配置代理的 CIDR（多个网段用逗号分隔），例如 `10.0.0.0/8,192.168.0.0/16`。只有直接连接地址命中这些网段时，应用才会从 `X-Forwarded-For` 解析客户端 IP；未配置或直连来源不可信时会忽略该请求头。必须阻止公网绕过负载均衡器直连应用端口，否则攻击者可以伪造代理来源。
 
