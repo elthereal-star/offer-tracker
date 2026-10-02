@@ -174,7 +174,7 @@ docker run --name offer-tracker -p 8080:8080 \
 java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
 ```
 
-生产实例的业务端口为 `8080`，管理端口默认为 `8081`（可用 `MANAGEMENT_PORT` 修改）。负载均衡器使用 `/actuator/health/readiness` 检查就绪，`/actuator/health/liveness` 用于存活检查；Prometheus 从 `/actuator/prometheus` 抓取指标。管理端口只应对负载均衡器、编排平台和监控网络开放，不应映射到公网。AI 请求超时可用 `AI_CONNECT_TIMEOUT` 和 `AI_REQUEST_TIMEOUT` 调整，默认分别为 10 秒和 90 秒；生产环境 AI 生成/评分接口默认按用户限流为每分钟 10 次，可通过 `AI_REQUESTS_PER_MINUTE` 调整。项目不会自动重试计费的 AI POST 请求。
+生产实例的业务端口为 `8080`，管理端口默认为 `8081`（可用 `MANAGEMENT_PORT` 修改）。负载均衡器使用 `/actuator/health/readiness` 检查就绪，`/actuator/health/liveness` 用于存活检查；Prometheus 从 `/actuator/prometheus` 抓取指标。管理端口只应对负载均衡器、编排平台和监控网络开放，不应映射到公网。AI 请求超时可用 `AI_CONNECT_TIMEOUT` 和 `AI_REQUEST_TIMEOUT` 调整，默认分别为 10 秒和 90 秒；生产环境 AI 生成/评分接口默认按用户限流为每分钟 10 次，可通过 `AI_REQUESTS_PER_MINUTE` 调整。同步 AI 接口不会对计费 POST 请求做盲目自动重试；异步任务 worker 会对失败任务最多尝试 3 次（包含首次），投递与执行语义为至少一次。如果供应商已处理请求但应用未能持久化结果，后续重试可能再次调用并产生额外费用；调用方应使用稳定的幂等键，运维方应监控重试和死信指标。
 
 Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts.yml)，部署时需接入现有 Prometheus/Alertmanager，并根据真实流量调整阈值。
 
