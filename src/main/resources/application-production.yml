@@ -45,6 +45,8 @@ management:
         enabled: true
 
 offer-tracker:
+  security:
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
   ai:
     connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
     request-timeout: ${AI_REQUEST_TIMEOUT:90s}
