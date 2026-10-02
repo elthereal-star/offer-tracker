@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { fetchAllApplicationPages, normalizeApiError } from './api.js'
+import { fetchAllApplicationPages, getAuthToken, normalizeApiError, setAuthToken } from './api.js'
+
+test('stores and clears the session token in browser storage', () => {
+  const values = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key)
+  }
+
+  setAuthToken('session-token')
+  assert.equal(getAuthToken(), 'session-token')
+  setAuthToken('')
+  assert.equal(getAuthToken(), '')
+  delete globalThis.localStorage
+})
 
 test('loads and combines every application page', async () => {
   const applications = Array.from({ length: 205 }, (_, index) => ({ id: index + 1 }))

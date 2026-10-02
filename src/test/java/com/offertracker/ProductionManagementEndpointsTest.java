@@ -28,7 +28,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.data.redis.password=",
         "spring.data.redis.ssl.enabled=false",
         "offer-tracker.storage.type=local",
-        "offer-tracker.auth.jwt-secret=test-production-jwt-secret-at-least-32-characters",
         "offer-tracker.auth.config-encryption-key=test-production-ai-config-key-at-least-32-characters"
 })
 @ActiveProfiles("production")

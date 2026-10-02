@@ -53,7 +53,6 @@ offer-tracker:
     task-poll-delay: ${AI_TASK_POLL_DELAY:1000}
     task-dispatch-retry-delay: ${AI_TASK_DISPATCH_RETRY_DELAY:1m}
   auth:
-    jwt-secret: ${JWT_SECRET}
     required: ${AUTH_REQUIRED:true}
     config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY}
   storage:

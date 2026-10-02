@@ -1,20 +1,14 @@
-# Cloud SMS Adapter Contract
+# SMS Verification (Deferred)
 
-The application deliberately does not bind to an SMS vendor. Registration depends on the small `SmsCodeSender` interface:
+The current account flow uses a phone number as an unverified login identifier. Registration and login require only a phone number and password; no SMS is sent. There is no password-reset or account-recovery flow yet.
 
-```java
-void send(String phone, String code);
-```
+Do not treat the stored phone number as proof of ownership. Before opening registration to the public, either add invitation controls or implement phone ownership verification and recovery with a selected SMS provider.
 
-Add one implementation in the deployment module or a private integration module and activate it with the `sms-cloud` profile. The implementation must be the only `SmsCodeSender` bean in that profile. It should:
+When SMS verification is implemented, keep the application vendor-neutral behind a small `SmsCodeSender` interface. The provider adapter must:
 
-- read credentials from the deployment secret manager or environment, never from source, exports, logs, or frontend assets;
-- use bounded connect and read timeouts and no blind retries for billable requests;
-- pass the normalized E.164 phone number and the generated code to the provider template;
-- avoid logging the code and full phone number, and redact provider responses;
-- map provider rejection/rate-limit/unavailability to a stable `BusinessException` response;
-- expose provider request IDs only in correlation-safe structured logs, without credentials or message content.
-
-When `production` is active without a cloud adapter, the built-in fallback keeps the application safe and returns HTTP 503 for verification-code sends. This is intentional: it prevents accidental use of the development logging sender. The `sms-cloud` profile must only be activated together with a concrete `SmsCodeSender` implementation; otherwise startup fails fast instead of exposing a partially configured registration flow.
-
-Before go-live, test successful delivery, invalid template/signature, provider timeout, provider rate limiting, duplicate requests, and secret rotation in a non-production account.
+- read credentials only from the deployment secret manager or environment;
+- use bounded timeouts and avoid blind retries for billable requests;
+- send a normalized phone number and one-time code;
+- avoid logging codes, full phone numbers, and provider credentials;
+- enforce shared per-phone and per-IP rate limits;
+- test successful delivery, invalid templates/signatures, provider timeouts, rate limits, duplicate requests, and secret rotation before production use.

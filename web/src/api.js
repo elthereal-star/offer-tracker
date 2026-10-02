@@ -2,6 +2,22 @@ import axios from 'axios'
 
 // 统一解包后端 ApiResponse：code !== 0 时按失败处理
 const http = axios.create({ baseURL: '/api', timeout: 10000 })
+const AUTH_TOKEN_KEY = 'offer-tracker-auth-token'
+
+export function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+}
+
+export function setAuthToken(token) {
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
+  else localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
+http.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
 
 export function normalizeApiError(error) {
   const responseMessage = error?.response?.data?.message
@@ -23,7 +39,15 @@ http.interceptors.response.use(
     }
     return res.data
   },
-  (err) => Promise.reject(normalizeApiError(err))
+  (err) => {
+    const hasSession = Boolean(err.config?.headers?.Authorization)
+    const isAuthRequest = err.config?.url?.startsWith('/auth/')
+    if (err.response?.status === 401 && hasSession && !isAuthRequest) {
+      setAuthToken('')
+      window.dispatchEvent(new Event('offer-tracker:auth-expired'))
+    }
+    return Promise.reject(normalizeApiError(err))
+  }
 )
 
 export async function fetchAllApplicationPages(fetchPage, pageSize = 100) {
@@ -38,6 +62,9 @@ export async function fetchAllApplicationPages(fetchPage, pageSize = 100) {
 }
 
 export default {
+  register: (data) => http.post('/auth/register', data),
+  login: (data) => http.post('/auth/login', data),
+  logout: () => http.post('/auth/logout'),
   listCompanies: () => http.get('/companies'),
   createCompany: (data) => http.post('/companies', data),
   updateCompany: (id, data) => http.put(`/companies/${id}`, data),

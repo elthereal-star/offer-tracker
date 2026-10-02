@@ -28,6 +28,12 @@ java -jar target/offer-tracker-0.1.0.jar
 - Swagger：http://localhost:8080/swagger-ui.html
 - H2 控制台：http://localhost:8080/h2-console
 
+## 登录认证
+
+生产环境使用手机号 + 密码注册/登录，注册成功后会直接建立 Sa-Token 会话；浏览器会保存会话令牌，并在 API 请求中使用 Bearer 认证。生产会话存放在 Redis，默认有效期为 30 天；本地开发使用进程内会话。
+
+当前手机号只是登录名，注册时不会验证号码归属，也没有密码找回。公开开放注册前，必须先接入短信验证，或限制为邀请注册并提供可靠的账号恢复流程。切换到 Sa-Token 后，先前签发的 JWT 会话需要重新登录。
+
 ## Windows 便携版
 
 安装 JDK 21 后可在 Windows PowerShell 中构建内置 Java 运行环境的免安装版本：
@@ -168,7 +174,7 @@ docker run --name offer-tracker -p 8080:8080 \
 
 ## 公网生产启动
 
-公网部署必须使用 MySQL、Redis 与 `production` profile。先在密钥管理系统中配置 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`REDIS_HOST`、`REDIS_PASSWORD`、`JWT_SECRET`、`AI_CONFIG_ENCRYPTION_KEY` 和对象存储的 `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`；两个密钥至少 32 个字符，AI 加密密钥需备份并保持稳定。Redis 默认启用 TLS，可通过 `REDIS_SSL_ENABLED=false` 覆盖；ACL 用户名可用 `REDIS_USERNAME` 配置。对象存储凭据使用 AWS SDK 默认凭据链（例如注入 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或实例角色）。生产 profile 强制启用认证；若任何配置将 `AUTH_REQUIRED` / `offer-tracker.auth.required` 设为 `false`，应用会拒绝启动：
+公网部署必须使用 MySQL、Redis 与 `production` profile。先在密钥管理系统中配置 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`REDIS_HOST`、`REDIS_PASSWORD`、`AI_CONFIG_ENCRYPTION_KEY` 和对象存储的 `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`；AI 加密密钥至少 32 个字符，需备份并保持稳定。Sa-Token 会话由 Redis 共享。Redis 默认启用 TLS，可通过 `REDIS_SSL_ENABLED=false` 覆盖；ACL 用户名可用 `REDIS_USERNAME` 配置。对象存储凭据使用 AWS SDK 默认凭据链（例如注入 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或实例角色）。生产 profile 强制启用认证；若任何配置将 `AUTH_REQUIRED` / `offer-tracker.auth.required` 设为 `false`，应用会拒绝启动：
 
 生产环境中的用户 AI 服务地址必须使用 HTTPS 域名；应用拒绝 localhost 和 IP 字面量，但部署仍须在网络层禁止访问内网、链路本地地址及云元数据地址，以防用户控制的域名解析到内部网络。
 
@@ -188,16 +194,17 @@ Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts
 
 应用还会对 `/api/auth/**` 执行共享 Redis IP 限流（默认每个客户端 IP 每分钟 60 次）。如果应用位于反向代理后面，请通过 `TRUSTED_PROXY_CIDRS` 配置代理的 CIDR（多个网段用逗号分隔），例如 `10.0.0.0/8,192.168.0.0/16`。只有直接连接地址命中这些网段时，应用才会从 `X-Forwarded-For` 解析客户端 IP；未配置或直连来源不可信时会忽略该请求头。必须阻止公网绕过负载均衡器直连应用端口，否则攻击者可以伪造代理来源。
 
-不要在公网部署中使用默认 H2 或本地 JWT/加密密钥。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
+不要在公网部署中使用默认 H2 或本地加密密钥。生产注册暂时是手机号 + 密码，不验证手机号所有权；用户可占用他人号码作为登录名，因此公开开放注册前必须接入短信验证或改为受控邀请注册。当前没有短信验证与密码找回流程。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
 
-生产 profile 不会使用日志短信适配器。验证码发送已由 Redis 共享限流，单手机号每分钟最多 1 次、每小时 5 次、每天 10 次。注册验证码暂时需要接入选定的云短信 `SmsCodeSender` 实现并启用 `sms-cloud` profile；未接入时验证码请求返回 503，不会把验证码写入日志。
-
-云短信适配器契约和安全要求见 [短信适配器说明](docs/ops/sms-adapter.md)。项目不绑定具体厂商，便于按部署地区接入阿里云、腾讯云或其他服务商。
+当前认证使用手机号作为登录名、密码登录和 Sa-Token 会话；登录失败会限流。手机号暂未验证，短信验证、密码找回和账号恢复列为后续工作，未完成前不应将开放注册用于公网正式服务。短信接入注意事项见[短信适配器后续方案](docs/ops/sms-adapter.md)。
 
 ## API 一览
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| POST | `/api/auth/register` | 手机号 + 密码注册并登录 |
+| POST | `/api/auth/login` | 手机号 + 密码登录，返回 Bearer token |
+| POST | `/api/auth/logout` | 注销当前 Sa-Token 会话 |
 | POST | `/api/companies` | 新增公司 |
 | GET | `/api/companies` | 公司列表 |
 | PUT | `/api/companies/{id}` | 编辑公司 |
@@ -274,7 +281,7 @@ web/              Vue 前端
 - [ ] 面试前提醒（定时任务 + 邮件/Webhook）
 - [ ] 从招聘网站 URL 自动解析公司与岗位
 - [ ] Excel 导入与逐行错误报告
-- [ ] 多用户与登录认证（Spring Security + JWT）
+- [ ] 手机号所有权验证与账号找回（短信服务商尚未接入）
 
 ## License
 

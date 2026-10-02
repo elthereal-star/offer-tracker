@@ -1,3 +1,39 @@
 package com.offertracker.controller;
-import com.offertracker.common.ApiResponse;import com.offertracker.common.BusinessException;import com.offertracker.dto.*;import com.offertracker.service.IdentityService;import jakarta.validation.Valid;import org.springframework.web.bind.annotation.*;
-@RestController @RequestMapping("/api/auth") public class AuthController {private final IdentityService identity;public AuthController(IdentityService i){identity=i;}@PostMapping("/verification-codes")public ApiResponse<Void> code(@Valid @RequestBody SendVerificationCodeRequest r){identity.sendRegistrationCode(r.phone());return ApiResponse.ok(null);}@PostMapping("/register")public ApiResponse<AuthTokenResponse> register(@Valid @RequestBody RegisterRequest r){return ApiResponse.ok(identity.register(r));}@PostMapping("/login")public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest r){return ApiResponse.ok(identity.login(r));}@PostMapping("/refresh")public ApiResponse<AuthTokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest r){return ApiResponse.ok(identity.refresh(r));}@PostMapping("/logout")public ApiResponse<Void> logout(@Valid @RequestBody RefreshTokenRequest r){identity.logout(r);return ApiResponse.ok(null);}}
+
+import com.offertracker.common.ApiResponse;
+import com.offertracker.dto.AuthTokenResponse;
+import com.offertracker.dto.LoginRequest;
+import com.offertracker.dto.RegisterRequest;
+import com.offertracker.service.IdentityService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    private final IdentityService identity;
+
+    public AuthController(IdentityService identity) {
+        this.identity = identity;
+    }
+
+    @PostMapping("/register")
+    public ApiResponse<AuthTokenResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ApiResponse.ok(identity.register(request));
+    }
+
+    @PostMapping("/login")
+    public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest request) {
+        return ApiResponse.ok(identity.login(request));
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization) {
+        identity.logout(authorization.substring("Bearer ".length()).trim());
+        return ApiResponse.ok(null);
+    }
+}

@@ -14,6 +14,9 @@
           <el-tooltip :content="darkMode ? '切换为浅色模式' : '切换为深色模式'">
             <el-button :icon="darkMode ? Sunny : Moon" circle :aria-label="darkMode ? '切换为浅色模式' : '切换为深色模式'" @click="toggleDarkMode" />
           </el-tooltip>
+          <el-button :icon="authToken ? SwitchButton : User" @click="authToken ? logout() : (authDialogVisible = true)">
+            {{ authToken ? '退出登录' : '登录 / 注册' }}
+          </el-button>
           <el-tooltip content="简历库">
             <el-button :icon="Document" circle aria-label="简历库" @click="resumeVisible = true" />
           </el-tooltip>
@@ -171,12 +174,13 @@
         v-if="aiSettingsVisible"
         v-model="aiSettingsVisible"
       />
+      <AuthDialog v-if="authDialogVisible" v-model="authDialogVisible" @authenticated="onAuthenticated" />
     </div>
   </el-config-provider>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   ElButton,
   ElConfigProvider,
@@ -194,7 +198,7 @@ import {
   ElSkeletonItem,
   ElTooltip
 } from 'element-plus'
-import { Briefcase, Calendar, CollectionTag, Document, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Setting, Star, Sunny } from '@element-plus/icons-vue'
+import { Briefcase, Calendar, CollectionTag, Document, Files, Filter, MapLocation, Moon, OfficeBuilding, Plus, Refresh, Search, Setting, Star, Sunny, SwitchButton, User } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/config-provider/style/css'
@@ -212,6 +216,7 @@ import 'element-plus/es/components/skeleton/style/css'
 import 'element-plus/es/components/skeleton-item/style/css'
 import 'element-plus/es/components/tooltip/style/css'
 import api from './api'
+import { getAuthToken, setAuthToken } from './api'
 import { BOARD_STATUSES, CITIES, SOURCES } from './constants'
 import StatsBar from './components/StatsBar.vue'
 import KanbanColumn from './components/KanbanColumn.vue'
@@ -223,6 +228,7 @@ const CompanyManagerDialog = defineAsyncComponent(() => import('./components/Com
 const DataManagerDialog = defineAsyncComponent(() => import('./components/DataManagerDialog.vue'))
 const ResumeManagerDialog = defineAsyncComponent(() => import('./components/ResumeManagerDialog.vue'))
 const AiSettingsDialog = defineAsyncComponent(() => import('./components/AiSettingsDialog.vue'))
+const AuthDialog = defineAsyncComponent(() => import('./components/AuthDialog.vue'))
 const AnalyticsView = defineAsyncComponent(() => import('./components/AnalyticsView.vue'))
 const CalendarView = defineAsyncComponent(() => import('./components/CalendarView.vue'))
 const TableView = defineAsyncComponent(() => import('./components/TableView.vue'))
@@ -240,6 +246,8 @@ const companyVisible = ref(false)
 const dataVisible = ref(false)
 const resumeVisible = ref(false)
 const aiSettingsVisible = ref(false)
+const authDialogVisible = ref(false)
+const authToken = ref(getAuthToken())
 const viewMode = ref('kanban')
 const darkMode = ref(localStorage.getItem('offer-tracker-theme') === 'dark' || (!localStorage.getItem('offer-tracker-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches))
 const calendarInterviews = ref({})
@@ -378,6 +386,30 @@ function toggleDarkMode() {
   localStorage.setItem('offer-tracker-theme', darkMode.value ? 'dark' : 'light')
 }
 
+async function onAuthenticated() {
+  authToken.value = getAuthToken()
+  await refresh({ initial: true })
+}
+
+async function logout() {
+  try {
+    await api.logout()
+  } catch {
+    // Clear the browser token even if the session already expired.
+  }
+  setAuthToken('')
+  authToken.value = ''
+  await refresh({ initial: true })
+}
+
+function handleSessionExpired() {
+  authToken.value = ''
+  if (!authDialogVisible.value) {
+    authDialogVisible.value = true
+    ElMessage.warning('登录已过期，请重新登录')
+  }
+}
+
 async function loadCalendarInterviews() {
   if (calendarLoading.value) return
   calendarLoading.value = true
@@ -395,5 +427,10 @@ watch(viewMode, (mode) => {
   if (mode === 'calendar') loadCalendarInterviews()
 })
 
-onMounted(() => refresh({ initial: true }))
+onMounted(() => {
+  window.addEventListener('offer-tracker:auth-expired', handleSessionExpired)
+  refresh({ initial: true })
+})
+
+onBeforeUnmount(() => window.removeEventListener('offer-tracker:auth-expired', handleSessionExpired))
 </script>

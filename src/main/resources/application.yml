@@ -21,6 +21,19 @@ spring:
       enabled: true
       path: /h2-console
 
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+  is-read-cookie: false
+  is-read-header: true
+  is-read-body: false
+
 management:
   endpoints:
     web:
@@ -52,7 +65,6 @@ offer-tracker:
     request-timeout: ${AI_REQUEST_TIMEOUT:90s}
     requests-per-minute: ${AI_REQUESTS_PER_MINUTE:10}
   auth:
-    jwt-secret: ${JWT_SECRET:local-development-only-jwt-secret-change-for-production}
     required: ${AUTH_REQUIRED:false}
     config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY:local-development-only-ai-config-key-change-for-production}
   storage:
