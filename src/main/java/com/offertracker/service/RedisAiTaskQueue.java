@@ -12,7 +12,7 @@ import java.util.Map;
 @Component
 @Profile("production")
 public class RedisAiTaskQueue implements AiTaskQueue {
-    static final String STREAM = "offer-tracker:ai-tasks";
+    public static final String STREAM = "offer-tracker:ai-tasks";
     private final StringRedisTemplate redis;
 
     public RedisAiTaskQueue(StringRedisTemplate redis) { this.redis = redis; }

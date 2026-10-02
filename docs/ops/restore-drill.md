@@ -31,3 +31,7 @@ This runbook is a rehearsal procedure, not an automatic cleanup job. Perform it 
 - Keep the isolated recovery environment until the evidence is reviewed and signed off.
 - Do not delete or overwrite the source database, source object prefix, local legacy files, or historical exports as part of this drill.
 - Repeat after schema, storage-provider, or deployment-topology changes.
+
+## AI task queue checks
+
+During the rehearsal, verify that the Redis consumer group `offer-tracker-ai-workers` can consume a test task, that a worker restart recovers an expired lease, and that a task after the retry limit appears in `offer-tracker:ai-tasks:dead-letter`. The MySQL `ai_tasks` row is authoritative; Redis stream entries are delivery state and must not be treated as the only audit record.
