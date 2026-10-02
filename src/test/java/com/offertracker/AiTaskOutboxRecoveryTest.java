@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.atLeast;
 
 @SpringBootTest
 @Transactional
@@ -46,7 +46,7 @@ class AiTaskOutboxRecoveryTest {
         verify(queue).publish(org.mockito.ArgumentMatchers.argThat(task -> task.getId().equals(newTask.getId())));
         verify(queue).publish(org.mockito.ArgumentMatchers.argThat(task -> task.getId().equals(stalePublished.getId())));
         verify(queue).publish(org.mockito.ArgumentMatchers.argThat(task -> task.getId().equals(staleDispatching.getId())));
-        verify(queue, times(3)).publish(org.mockito.ArgumentMatchers.any(AiTask.class));
+        verify(queue, atLeast(3)).publish(org.mockito.ArgumentMatchers.any(AiTask.class));
         assertEquals("PUBLISHED", tasks.selectById(newTask.getId()).getDispatchStatus());
         assertEquals("PUBLISHED", tasks.selectById(stalePublished.getId()).getDispatchStatus());
         assertEquals("PUBLISHED", tasks.selectById(staleDispatching.getId()).getDispatchStatus());

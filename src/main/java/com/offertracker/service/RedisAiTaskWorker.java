@@ -99,6 +99,7 @@ public class RedisAiTaskWorker {
             int updated = tasks.update(update, new LambdaUpdateWrapper<AiTask>()
                     .eq(AiTask::getId, task.getId())
                     .eq(AiTask::getStatus, "PROCESSING")
+                    .set(AiTask::getLeaseUntil, null)
                     .lt(AiTask::getLeaseUntil, LocalDateTime.now()));
             if (updated == 0) continue;
             task.setStatus(update.getStatus());
@@ -126,7 +127,7 @@ public class RedisAiTaskWorker {
                 default -> throw new IllegalArgumentException("unsupported AI task type: " + task.getTaskType());
             };
             task.setStatus("SUCCEEDED"); task.setDispatchStatus("PUBLISHED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null); task.setLeaseUntil(null);
-            task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
+            task.setUpdatedAt(LocalDateTime.now()); updateAndClearLease(task);
             metrics.counter("offer_tracker_ai_tasks_succeeded_total").increment();
         } catch (Exception ex) {
             task.setUpdatedAt(LocalDateTime.now());
@@ -134,7 +135,7 @@ public class RedisAiTaskWorker {
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
             task.setDispatchStatus("PENDING".equals(task.getStatus()) ? "NEW" : "PUBLISHED");
             task.setLeaseUntil(null);
-            tasks.updateById(task);
+            updateAndClearLease(task);
             if ("PENDING".equals(task.getStatus())) metrics.counter("offer_tracker_ai_tasks_retried_total").increment();
             else { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
         } finally { CurrentUserContext.clear(); acknowledge(record); }
@@ -151,6 +152,12 @@ public class RedisAiTaskWorker {
     private void publishDeadLetter(AiTask task) {
         redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord().in(DEAD_LETTER_STREAM).ofMap(
                 java.util.Map.of("taskId", task.getId().toString(), "taskType", task.getTaskType(), "error", task.getErrorMessage() == null ? "lease expired" : task.getErrorMessage())));
+    }
+
+    private void updateAndClearLease(AiTask task) {
+        tasks.update(task, new LambdaUpdateWrapper<AiTask>()
+                .eq(AiTask::getId, task.getId())
+                .set(AiTask::getLeaseUntil, null));
     }
 
     private Long optionalLong(JsonNode payload, String name) { return payload.hasNonNull(name) ? payload.get(name).asLong() : null; }
