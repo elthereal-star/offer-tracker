@@ -30,7 +30,7 @@ class S3ResumeFileStorageMinioIntegrationTest {
 
     @Container
     static final GenericContainer<?> MINIO = new GenericContainer<>(
-            DockerImageName.parse("minio/minio:RELEASE.2024-12-18T13-15-44Z"))
+            DockerImageName.parse("quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z"))
             .withEnv("MINIO_ROOT_USER", ACCESS_KEY)
             .withEnv("MINIO_ROOT_PASSWORD", SECRET_KEY)
             .withCommand("server", "/data")
