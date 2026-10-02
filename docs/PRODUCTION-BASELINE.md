@@ -29,6 +29,7 @@ This document records the rules for the productionization work. It is a baseline
 - A starter Prometheus alert set is provided at `docs/ops/prometheus-alerts.yml`. Import it into the monitoring stack, configure the readiness probe job label, and route critical alerts to on-call. Thresholds are initial baselines, not capacity guarantees; tune them after collecting production traffic and latency distributions.
 - A restore rehearsal procedure is provided at `docs/ops/restore-drill.md`. It is intentionally manual and non-destructive: MySQL is authoritative, Redis is rebuilt empty, resume objects are checksum-verified, and the source environment is retained.
 - A read-only k6 capacity baseline is provided at `docs/ops/k6-readonly-smoke.js` with execution notes in `docs/ops/capacity-test.md`. It is not a million-user claim; use staged tests to establish measured limits.
+- The vendor-neutral SMS adapter contract is documented in `docs/ops/sms-adapter.md`; production still requires a real provider implementation and delivery rehearsal before registration is opened publicly.
 
 ## Required Production Interfaces
 

@@ -188,6 +188,8 @@ Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts
 
 生产 profile 不会使用日志短信适配器。验证码发送已由 Redis 共享限流，单手机号每分钟最多 1 次、每小时 5 次、每天 10 次。注册验证码暂时需要接入选定的云短信 `SmsCodeSender` 实现并启用 `sms-cloud` profile；未接入时验证码请求返回 503，不会把验证码写入日志。
 
+云短信适配器契约和安全要求见 [短信适配器说明](docs/ops/sms-adapter.md)。项目不绑定具体厂商，便于按部署地区接入阿里云、腾讯云或其他服务商。
+
 ## API 一览
 
 | 方法 | 路径 | 说明 |
