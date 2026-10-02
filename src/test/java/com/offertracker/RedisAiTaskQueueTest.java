@@ -5,6 +5,7 @@ import com.offertracker.service.RedisAiTaskQueue;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -28,7 +29,7 @@ class RedisAiTaskQueueTest {
         factory.afterPropertiesSet();
         try {
             StringRedisTemplate redis = new StringRedisTemplate(factory); redis.afterPropertiesSet();
-            RedisAiTaskQueue queue = new RedisAiTaskQueue(redis);
+            RedisAiTaskQueue queue = new RedisAiTaskQueue(redis, new SimpleMeterRegistry());
             AiTask task = new AiTask(); task.setId(41L); task.setTaskType("GENERATE_QUESTION");
             task.setCreatedAt(LocalDateTime.now());
             queue.publish(task);

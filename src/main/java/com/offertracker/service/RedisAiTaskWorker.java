@@ -22,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
@@ -42,10 +43,11 @@ public class RedisAiTaskWorker {
     private final AiTaskMapper tasks;
     private final AiInterviewService interviews;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry metrics;
     private final String consumer = "worker-" + UUID.randomUUID();
 
-    public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, ObjectMapper objectMapper) {
-        this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.objectMapper = objectMapper;
+    public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, ObjectMapper objectMapper, MeterRegistry metrics) {
+        this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.objectMapper = objectMapper; this.metrics = metrics;
     }
 
     @PostConstruct
@@ -74,7 +76,8 @@ public class RedisAiTaskWorker {
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
             task.setLeaseUntil(null); task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
             if ("PENDING".equals(task.getStatus())) publish(task);
-            else publishDeadLetter(task);
+            else { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
+            metrics.counter("offer_tracker_ai_tasks_lease_recovered_total").increment();
         }
     }
 
@@ -95,13 +98,15 @@ public class RedisAiTaskWorker {
             };
             task.setStatus("SUCCEEDED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null); task.setLeaseUntil(null);
             task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
+            metrics.counter("offer_tracker_ai_tasks_succeeded_total").increment();
         } catch (Exception ex) {
             task.setAttempts(task.getAttempts() + 1); task.setUpdatedAt(LocalDateTime.now());
             task.setErrorMessage(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
             task.setLeaseUntil(null);
             tasks.updateById(task);
-            if ("PENDING".equals(task.getStatus())) publish(task); else publishDeadLetter(task);
+            if ("PENDING".equals(task.getStatus())) { publish(task); metrics.counter("offer_tracker_ai_tasks_retried_total").increment(); }
+            else { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
         } finally { CurrentUserContext.clear(); acknowledge(record); }
     }
 
