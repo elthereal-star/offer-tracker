@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.offertracker.common.BusinessException;
 import com.offertracker.common.CurrentUser;
 import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.CreateAiInterviewRequest;
@@ -131,7 +132,9 @@ public class RedisAiTaskWorker {
             metrics.counter("offer_tracker_ai_tasks_succeeded_total").increment();
         } catch (Exception ex) {
             task.setUpdatedAt(LocalDateTime.now());
-            task.setErrorMessage(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+            task.setErrorMessage(safeErrorMessage(ex));
+            log.warn("AI task failed taskId={} attempt={} errorType={}",
+                    task.getId(), task.getAttempts(), ex.getClass().getSimpleName());
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
             task.setDispatchStatus("PENDING".equals(task.getStatus()) ? "NEW" : "PUBLISHED");
             task.setLeaseUntil(null);
@@ -158,6 +161,15 @@ public class RedisAiTaskWorker {
         tasks.update(task, new LambdaUpdateWrapper<AiTask>()
                 .eq(AiTask::getId, task.getId())
                 .set(AiTask::getLeaseUntil, null));
+    }
+
+    static String safeErrorMessage(Exception error) {
+        if (!(error instanceof BusinessException business)) return "AI 任务执行失败，请稍后重试";
+        String message = business.getMessage();
+        if (message == null || message.isBlank()) return "AI 任务执行失败，请稍后重试";
+        int codePoints = message.codePointCount(0, message.length());
+        if (codePoints <= 1024) return message;
+        return message.substring(0, message.offsetByCodePoints(0, 1024));
     }
 
     private Long optionalLong(JsonNode payload, String name) { return payload.hasNonNull(name) ? payload.get(name).asLong() : null; }

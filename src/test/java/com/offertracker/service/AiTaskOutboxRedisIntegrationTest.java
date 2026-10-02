@@ -213,7 +213,7 @@ class AiTaskOutboxRedisIntegrationTest {
                 StreamOffset.fromStart("offer-tracker:ai-tasks:dead-letter"));
         assertEquals(1, deadLetters.size());
         assertEquals(task.getId().toString(), deadLetters.get(0).getValue().get("taskId"));
-        assertEquals("provider request timed out", deadLetters.get(0).getValue().get("error"));
+        assertEquals("AI 任务执行失败，请稍后重试", deadLetters.get(0).getValue().get("error"));
     }
 
     private List<MapRecord<String, Object, Object>> readStream() {

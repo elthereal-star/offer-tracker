@@ -1,6 +1,7 @@
 package com.offertracker.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.offertracker.common.BusinessException;
 import com.offertracker.entity.AiTask;
 import com.offertracker.mapper.AiTaskMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -50,6 +51,17 @@ class RedisAiTaskWorkerStateTest {
         assertFalse(worker.claim(processing));
         assertFalse(worker.claim(scheduled));
         org.mockito.Mockito.verifyNoInteractions(tasks);
+    }
+
+    @Test
+    void exposesOnlySafeAndBoundedTaskErrors() {
+        assertEquals("AI 任务执行失败，请稍后重试",
+                RedisAiTaskWorker.safeErrorMessage(new IllegalStateException("api_key=secret-value")));
+
+        String longBusinessMessage = "错误".repeat(1100);
+        String safeMessage = RedisAiTaskWorker.safeErrorMessage(new BusinessException(400, longBusinessMessage));
+        assertTrue(safeMessage.codePointCount(0, safeMessage.length()) <= 1024);
+        assertTrue(longBusinessMessage.startsWith(safeMessage));
     }
 
     private RedisAiTaskWorker worker(AiTaskMapper tasks) {
