@@ -12,6 +12,12 @@ public class LoggingSmsCodeSender implements SmsCodeSender {
 
     @Override
     public void send(String phone, String code) {
-        log.info("开发环境短信验证码 phone={} code={}", phone, code);
+        log.info("开发环境短信验证码 phone={} code={}", maskPhone(phone), code);
+    }
+
+    static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) return "***";
+        int prefixLength = phone.startsWith("+") ? 4 : 3;
+        return phone.substring(0, prefixLength) + "****" + phone.substring(phone.length() - 2);
     }
 }
