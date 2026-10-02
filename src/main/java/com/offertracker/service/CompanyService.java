@@ -9,6 +9,7 @@ import com.offertracker.entity.JobApplication;
 import com.offertracker.mapper.CompanyMapper;
 import com.offertracker.mapper.JobApplicationMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,7 +36,11 @@ public class CompanyService {
         company.setWebsite(trimToNull(request.website()));
         company.setNotes(trimToNull(request.notes()));
         company.setCreatedAt(LocalDateTime.now());
-        companyMapper.insert(company);
+        try {
+            companyMapper.insert(company);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateNameConflict(name, exception);
+        }
         return company;
     }
 
@@ -52,7 +57,11 @@ public class CompanyService {
         company.setName(name);
         company.setWebsite(trimToNull(request.website()));
         company.setNotes(trimToNull(request.notes()));
-        companyMapper.updateById(company);
+        try {
+            companyMapper.updateById(company);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateNameConflict(name, exception);
+        }
         return company;
     }
 
@@ -91,5 +100,9 @@ public class CompanyService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private BusinessException duplicateNameConflict(String name, DataIntegrityViolationException cause) {
+        return new BusinessException(409, "公司名称已存在: " + name);
     }
 }
