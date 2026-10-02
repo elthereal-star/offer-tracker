@@ -6,6 +6,11 @@
   --soft-shadow: 0 10px 28px rgba(43, 55, 82, 0.08);
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 * {
   box-sizing: border-box;
 }
