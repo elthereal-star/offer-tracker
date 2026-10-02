@@ -73,10 +73,18 @@ public class RedisAiTaskWorker {
                 .eq(AiTask::getStatus, "PROCESSING")
                 .lt(AiTask::getLeaseUntil, LocalDateTime.now()));
         for (AiTask task : expired) {
-            task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
-            task.setLeaseUntil(null); task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
-            if ("PENDING".equals(task.getStatus())) publish(task);
-            else { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
+            boolean exhausted = task.getAttempts() >= MAX_ATTEMPTS;
+            AiTask update = new AiTask();
+            update.setStatus(exhausted ? "FAILED" : "PENDING");
+            update.setDispatchStatus(exhausted ? "PUBLISHED" : "NEW");
+            update.setLeaseUntil(null); update.setUpdatedAt(LocalDateTime.now());
+            int updated = tasks.update(update, new LambdaUpdateWrapper<AiTask>()
+                    .eq(AiTask::getId, task.getId())
+                    .eq(AiTask::getStatus, "PROCESSING")
+                    .lt(AiTask::getLeaseUntil, LocalDateTime.now()));
+            if (updated == 0) continue;
+            task.setStatus(update.getStatus());
+            if (exhausted) { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
             metrics.counter("offer_tracker_ai_tasks_lease_recovered_total").increment();
         }
     }
@@ -86,6 +94,9 @@ public class RedisAiTaskWorker {
         if (rawId == null) { acknowledge(record); return; }
         AiTask task = tasks.selectById(Long.valueOf(rawId.toString()));
         if (task == null || !claim(task)) { acknowledge(record); return; }
+        task.setStatus("PROCESSING");
+        task.setDispatchStatus("PUBLISHED");
+        task.setAttempts(task.getAttempts() + 1);
         try {
             CurrentUserContext.set(new CurrentUser(task.getOwnerId(), "USER"));
             JsonNode payload = objectMapper.readTree(task.getPayload());
@@ -96,28 +107,27 @@ public class RedisAiTaskWorker {
                 case "FINISH_INTERVIEW" -> interviews.finish(payload.path("sessionId").asLong());
                 default -> throw new IllegalArgumentException("unsupported AI task type: " + task.getTaskType());
             };
-            task.setStatus("SUCCEEDED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null); task.setLeaseUntil(null);
+            task.setStatus("SUCCEEDED"); task.setDispatchStatus("PUBLISHED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null); task.setLeaseUntil(null);
             task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
             metrics.counter("offer_tracker_ai_tasks_succeeded_total").increment();
         } catch (Exception ex) {
-            task.setAttempts(task.getAttempts() + 1); task.setUpdatedAt(LocalDateTime.now());
+            task.setUpdatedAt(LocalDateTime.now());
             task.setErrorMessage(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
+            task.setDispatchStatus("PENDING".equals(task.getStatus()) ? "NEW" : "PUBLISHED");
             task.setLeaseUntil(null);
             tasks.updateById(task);
-            if ("PENDING".equals(task.getStatus())) { publish(task); metrics.counter("offer_tracker_ai_tasks_retried_total").increment(); }
+            if ("PENDING".equals(task.getStatus())) metrics.counter("offer_tracker_ai_tasks_retried_total").increment();
             else { publishDeadLetter(task); metrics.counter("offer_tracker_ai_tasks_dead_letter_total").increment(); }
         } finally { CurrentUserContext.clear(); acknowledge(record); }
     }
 
     private boolean claim(AiTask task) {
         if (!"PENDING".equals(task.getStatus()) || task.getAvailableAt() != null && task.getAvailableAt().isAfter(LocalDateTime.now())) return false;
-        AiTask update = new AiTask(); update.setStatus("PROCESSING"); update.setAttempts(task.getAttempts() + 1); update.setLeaseUntil(LocalDateTime.now().plus(LEASE)); update.setUpdatedAt(LocalDateTime.now());
-        return tasks.update(update, new LambdaUpdateWrapper<AiTask>().eq(AiTask::getId, task.getId()).eq(AiTask::getStatus, "PENDING")) == 1;
-    }
-
-    private void publish(AiTask task) {
-        redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord().in(STREAM).ofMap(java.util.Map.of("taskId", task.getId().toString(), "taskType", task.getTaskType())));
+        AiTask update = new AiTask(); update.setStatus("PROCESSING"); update.setDispatchStatus("PUBLISHED"); update.setAttempts(task.getAttempts() + 1); update.setLeaseUntil(LocalDateTime.now().plus(LEASE)); update.setUpdatedAt(LocalDateTime.now());
+        return tasks.update(update, new LambdaUpdateWrapper<AiTask>()
+                .eq(AiTask::getId, task.getId())
+                .eq(AiTask::getStatus, "PENDING")) == 1;
     }
 
     private void publishDeadLetter(AiTask task) {

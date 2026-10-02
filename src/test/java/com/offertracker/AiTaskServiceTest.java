@@ -37,6 +37,10 @@ class AiTaskServiceTest {
         AiTaskResponse created = tasks.submit("GENERATE_QUESTION", "request-1", java.util.Map.of("resumeId", 7));
         AiTaskResponse repeated = tasks.submit("GENERATE_QUESTION", "request-1", java.util.Map.of("resumeId", 7));
         assertEquals(created.id(), repeated.id());
+        AiTask persisted = taskMapper.selectById(created.id());
+        assertEquals("NEW", persisted.getDispatchStatus());
+        assertEquals("PENDING", persisted.getStatus());
+        assertEquals(0, persisted.getAttempts());
 
         User second = user("+8613800099002");
         CurrentUserContext.set(new CurrentUser(second.getId(), "USER"));

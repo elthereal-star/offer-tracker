@@ -13,6 +13,7 @@ public class AiTask {
     private String taskType;
     private String payload;
     private String status;
+    private String dispatchStatus;
     private String idempotencyKey;
     private Integer attempts;
     private LocalDateTime availableAt;
@@ -27,6 +28,7 @@ public class AiTask {
     public String getTaskType() { return taskType; } public void setTaskType(String v) { taskType = v; }
     public String getPayload() { return payload; } public void setPayload(String v) { payload = v; }
     public String getStatus() { return status; } public void setStatus(String v) { status = v; }
+    public String getDispatchStatus() { return dispatchStatus; } public void setDispatchStatus(String v) { dispatchStatus = v; }
     public String getIdempotencyKey() { return idempotencyKey; } public void setIdempotencyKey(String v) { idempotencyKey = v; }
     public Integer getAttempts() { return attempts; } public void setAttempts(Integer v) { attempts = v; }
     public LocalDateTime getAvailableAt() { return availableAt; } public void setAvailableAt(LocalDateTime v) { availableAt = v; }

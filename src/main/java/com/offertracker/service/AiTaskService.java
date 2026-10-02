@@ -16,11 +16,10 @@ import java.time.LocalDateTime;
 @Service
 public class AiTaskService {
     private final AiTaskMapper tasks;
-    private final AiTaskQueue queue;
     private final ObjectMapper objectMapper;
 
-    public AiTaskService(AiTaskMapper tasks, AiTaskQueue queue, ObjectMapper objectMapper) {
-        this.tasks = tasks; this.queue = queue; this.objectMapper = objectMapper;
+    public AiTaskService(AiTaskMapper tasks, ObjectMapper objectMapper) {
+        this.tasks = tasks; this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -34,9 +33,10 @@ public class AiTaskService {
             task.setOwnerId(ownerId); task.setTaskType(taskType.trim());
             task.setIdempotencyKey(idempotencyKey.trim());
             task.setPayload(writePayload(payload)); task.setStatus("PENDING");
+            task.setDispatchStatus("NEW");
             task.setAttempts(0); task.setAvailableAt(LocalDateTime.now());
             task.setCreatedAt(LocalDateTime.now()); task.setUpdatedAt(LocalDateTime.now());
-            tasks.insert(task); queue.publish(task); return toResponse(task);
+            tasks.insert(task); return toResponse(task);
         } catch (DuplicateKeyException ex) {
             AiTask existing = tasks.selectOne(new LambdaQueryWrapper<AiTask>()
                     .eq(AiTask::getOwnerId, ownerId).eq(AiTask::getIdempotencyKey, idempotencyKey.trim()));
