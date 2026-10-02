@@ -1,5 +1,6 @@
 package com.offertracker.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.offertracker.dto.AiInterviewSessionResponse;
 import com.offertracker.dto.CreateAiInterviewRequest;
@@ -153,6 +154,32 @@ class AiTaskOutboxRedisIntegrationTest {
         assertEquals("SUCCEEDED", completed.getStatus());
         assertEquals(2, completed.getAttempts());
         verify(interviews, times(1)).create(any(CreateAiInterviewRequest.class));
+    }
+
+    @Test
+    void recoversExpiredWorkerLeasesInBoundedBatches() {
+        User user = user();
+        LocalDateTime expiredAt = LocalDateTime.now().minusMinutes(1);
+        for (int i = 0; i < 101; i++) {
+            AiTask task = task(user);
+            task.setStatus("PROCESSING");
+            task.setAttempts(1);
+            task.setLeaseUntil(expiredAt);
+            tasks.updateById(task);
+        }
+
+        RedisAiTaskWorker worker = new RedisAiTaskWorker(redis, tasks,
+                mock(AiInterviewService.class), new ObjectMapper(), metrics);
+        worker.recoverExpiredLeases();
+
+        assertEquals(100L, tasks.selectCount(new LambdaQueryWrapper<AiTask>()
+                .eq(AiTask::getOwnerId, user.getId()).eq(AiTask::getStatus, "PENDING")));
+        assertEquals(1L, tasks.selectCount(new LambdaQueryWrapper<AiTask>()
+                .eq(AiTask::getOwnerId, user.getId()).eq(AiTask::getStatus, "PROCESSING")));
+
+        worker.recoverExpiredLeases();
+        assertEquals(101L, tasks.selectCount(new LambdaQueryWrapper<AiTask>()
+                .eq(AiTask::getOwnerId, user.getId()).eq(AiTask::getStatus, "PENDING")));
     }
 
     @Test

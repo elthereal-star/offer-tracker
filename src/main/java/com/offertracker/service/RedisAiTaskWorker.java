@@ -40,6 +40,7 @@ public class RedisAiTaskWorker {
     private static final String GROUP = "offer-tracker-ai-workers";
     private static final String DEAD_LETTER_STREAM = "offer-tracker:ai-tasks:dead-letter";
     private static final int MAX_ATTEMPTS = 3;
+    private static final int LEASE_RECOVERY_BATCH_SIZE = 100;
     private static final Duration LEASE = Duration.ofMinutes(5);
     private final StringRedisTemplate redis;
     private final AiTaskMapper tasks;
@@ -90,7 +91,9 @@ public class RedisAiTaskWorker {
     void recoverExpiredLeases() {
         List<AiTask> expired = tasks.selectList(new LambdaQueryWrapper<AiTask>()
                 .eq(AiTask::getStatus, "PROCESSING")
-                .lt(AiTask::getLeaseUntil, LocalDateTime.now()));
+                .lt(AiTask::getLeaseUntil, LocalDateTime.now())
+                .orderByAsc(AiTask::getLeaseUntil)
+                .last("LIMIT " + LEASE_RECOVERY_BATCH_SIZE));
         for (AiTask task : expired) {
             boolean exhausted = task.getAttempts() >= MAX_ATTEMPTS;
             AiTask update = new AiTask();
