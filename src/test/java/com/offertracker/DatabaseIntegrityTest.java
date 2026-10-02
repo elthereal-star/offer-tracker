@@ -56,4 +56,12 @@ class DatabaseIntegrityTest {
                 application.getId());
         assertEquals(0, remaining);
     }
+
+    @Test
+    void createsIdentityFoundationWithUniquePhone() {
+        jdbcTemplate.update("INSERT INTO users (phone, password_hash) VALUES (?, ?)", "13800000001", "test-hash");
+        assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update(
+                "INSERT INTO users (phone, password_hash) VALUES (?, ?)", "13800000001", "other-hash"));
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM auth_refresh_sessions", Integer.class));
+    }
 }

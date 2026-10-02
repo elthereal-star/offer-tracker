@@ -2,6 +2,7 @@ package com.offertracker.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.BackupData;
 import com.offertracker.dto.ImportPreview;
 import com.offertracker.dto.ImportResult;
@@ -44,18 +45,18 @@ public class DataTransferService {
         return new BackupData(
                 BACKUP_VERSION,
                 LocalDateTime.now(),
-                companyMapper.selectList(new LambdaQueryWrapper<Company>().orderByAsc(Company::getId)),
-                applicationMapper.selectList(new LambdaQueryWrapper<JobApplication>().orderByAsc(JobApplication::getId)),
+                companyMapper.selectList(ownerQuery(new LambdaQueryWrapper<Company>(), Company::getOwnerId).orderByAsc(Company::getId)),
+                applicationMapper.selectList(ownerQuery(new LambdaQueryWrapper<JobApplication>(), JobApplication::getOwnerId).orderByAsc(JobApplication::getId)),
                 interviewMapper.selectList(new LambdaQueryWrapper<InterviewRound>().orderByAsc(InterviewRound::getId))
         );
     }
 
     public byte[] exportApplicationsCsv() {
         Map<Long, String> companyNames = new HashMap<>();
-        companyMapper.selectList(null).forEach(company -> companyNames.put(company.getId(), company.getName()));
+        companyMapper.selectList(ownerQuery(new LambdaQueryWrapper<Company>(), Company::getOwnerId)).forEach(company -> companyNames.put(company.getId(), company.getName()));
         StringBuilder csv = new StringBuilder("\uFEFF公司,岗位,城市,薪资范围,状态,渠道,岗位链接,投递日期,备注\r\n");
-        applicationMapper.selectList(new LambdaQueryWrapper<JobApplication>()
-                        .orderByDesc(JobApplication::getUpdatedAt))
+        applicationMapper.selectList(ownerQuery(new LambdaQueryWrapper<JobApplication>()
+                        .orderByDesc(JobApplication::getUpdatedAt), JobApplication::getOwnerId))
                 .forEach(application -> csv.append(csvRow(
                         companyNames.get(application.getCompanyId()),
                         application.getPosition(),
@@ -233,5 +234,10 @@ public class DataTransferService {
 
     private <T> List<T> safe(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private <T> LambdaQueryWrapper<T> ownerQuery(LambdaQueryWrapper<T> query, java.util.function.Function<T, ?> ignored) {
+        if (CurrentUserContext.get() != null) query.apply("owner_id = {0}", CurrentUserContext.get().id());
+        return query;
     }
 }

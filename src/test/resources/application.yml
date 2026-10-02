@@ -4,3 +4,7 @@ spring:
     url: jdbc:h2:mem:offer-tracker-test;DB_CLOSE_DELAY=-1
     username: sa
     password: ""
+
+offer-tracker:
+  auth:
+    config-encryption-key: test-only-ai-config-encryption-key-at-least-32-chars

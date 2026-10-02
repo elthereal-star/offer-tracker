@@ -19,4 +19,5 @@ RUN mkdir -p /app/data && chown offertracker:offertracker /app/data
 USER offertracker
 VOLUME ["/app/data"]
 EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]

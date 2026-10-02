@@ -62,6 +62,7 @@ public class InterviewService {
         if (round == null) {
             throw new BusinessException(404, "面试记录不存在: " + roundId);
         }
+        applicationService.getOrThrow(round.getApplicationId());
         round.setResult(request.result());
         if (request.feedback() != null) {
             round.setFeedback(request.feedback());

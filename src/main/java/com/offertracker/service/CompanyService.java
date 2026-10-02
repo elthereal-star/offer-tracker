@@ -1,6 +1,7 @@
 package com.offertracker.service;
 
 import com.offertracker.common.BusinessException;
+import com.offertracker.common.CurrentUserContext;
 import com.offertracker.dto.CreateCompanyRequest;
 import com.offertracker.dto.UpdateCompanyRequest;
 import com.offertracker.entity.Company;
@@ -8,6 +9,7 @@ import com.offertracker.entity.JobApplication;
 import com.offertracker.mapper.CompanyMapper;
 import com.offertracker.mapper.JobApplicationMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -29,16 +31,23 @@ public class CompanyService {
         String name = request.name().trim();
         ensureNameAvailable(name, null);
         Company company = new Company();
+        if (CurrentUserContext.get() != null) company.setOwnerId(CurrentUserContext.get().id());
         company.setName(name);
         company.setWebsite(trimToNull(request.website()));
         company.setNotes(trimToNull(request.notes()));
         company.setCreatedAt(LocalDateTime.now());
-        companyMapper.insert(company);
+        try {
+            companyMapper.insert(company);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateNameConflict(name, exception);
+        }
         return company;
     }
 
     public List<Company> listAll() {
-        return companyMapper.selectList(new LambdaQueryWrapper<Company>().orderByAsc(Company::getName));
+        LambdaQueryWrapper<Company> query = new LambdaQueryWrapper<Company>().orderByAsc(Company::getName);
+        if (CurrentUserContext.get() != null) query.eq(Company::getOwnerId, CurrentUserContext.get().id());
+        return companyMapper.selectList(query);
     }
 
     public Company update(Long id, UpdateCompanyRequest request) {
@@ -48,7 +57,11 @@ public class CompanyService {
         company.setName(name);
         company.setWebsite(trimToNull(request.website()));
         company.setNotes(trimToNull(request.notes()));
-        companyMapper.updateById(company);
+        try {
+            companyMapper.updateById(company);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateNameConflict(name, exception);
+        }
         return company;
     }
 
@@ -67,15 +80,19 @@ public class CompanyService {
         if (company == null) {
             throw new BusinessException(404, "公司不存在: " + id);
         }
+        if (CurrentUserContext.get() != null && !CurrentUserContext.get().id().equals(company.getOwnerId())) {
+            throw new BusinessException(404, "公司不存在: " + id);
+        }
         return company;
     }
 
     private void ensureNameAvailable(String name, Long excludedId) {
         String normalized = name.toLowerCase(Locale.ROOT);
-        boolean duplicate = companyMapper.selectList(null).stream()
-                .anyMatch(company -> !company.getId().equals(excludedId)
-                        && company.getName().trim().toLowerCase(Locale.ROOT).equals(normalized));
-        if (duplicate) {
+        LambdaQueryWrapper<Company> query = new LambdaQueryWrapper<>();
+        if (CurrentUserContext.get() != null) query.eq(Company::getOwnerId, CurrentUserContext.get().id());
+        query.apply("LOWER(TRIM(name)) = {0}", normalized);
+        if (excludedId != null) query.ne(Company::getId, excludedId);
+        if (companyMapper.selectCount(query) > 0) {
             throw new BusinessException(409, "公司名称已存在: " + name);
         }
     }
@@ -83,5 +100,9 @@ public class CompanyService {
     private String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private BusinessException duplicateNameConflict(String name, DataIntegrityViolationException cause) {
+        return new BusinessException(409, "公司名称已存在: " + name);
     }
 }

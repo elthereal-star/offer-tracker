@@ -21,6 +21,32 @@ spring:
       enabled: true
       path: /h2-console
 
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+  is-read-cookie: false
+  is-read-header: true
+  is-read-body: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  health:
+    redis:
+      enabled: false
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -32,3 +58,16 @@ mybatis-plus:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+offer-tracker:
+  ai:
+    connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
+    request-timeout: ${AI_REQUEST_TIMEOUT:90s}
+    requests-per-minute: ${AI_REQUESTS_PER_MINUTE:10}
+  auth:
+    required: ${AUTH_REQUIRED:false}
+    config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY:local-development-only-ai-config-key-change-for-production}
+  storage:
+    type: ${RESUME_STORAGE_TYPE:local}
+    resume-dir: ${RESUME_STORAGE_DIR:./data/resumes}
+    ai-config-file: ${AI_CONFIG_FILE:./data/ai-config.json}

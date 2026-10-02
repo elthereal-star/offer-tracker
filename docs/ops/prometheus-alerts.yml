@@ -1,0 +1,58 @@
+groups:
+  - name: offer-tracker-availability
+    rules:
+      - alert: OfferTrackerTargetDown
+        expr: up{application="offer-tracker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Offer Tracker 实例不可达"
+          description: "Prometheus 连续 2 分钟无法抓取该实例。"
+
+      - alert: OfferTrackerReadinessFailed
+        expr: probe_success{job="offer-tracker-readiness"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Offer Tracker 未就绪"
+          description: "就绪检查失败，检查 MySQL、Redis 和实例日志。"
+
+      - alert: OfferTrackerHighHttp5xxRate
+        expr: sum(rate(http_server_requests_seconds_count{application="offer-tracker",status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{application="offer-tracker"}[5m])), 1) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Offer Tracker 5xx 比例过高"
+          description: "过去 10 分钟 HTTP 5xx 比例超过 2%。"
+
+      - alert: OfferTrackerHighHttpLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application="offer-tracker",uri=~"/api/.*"}[5m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Offer Tracker API 延迟过高"
+          description: "API 请求 p95 延迟连续 10 分钟超过 2 秒。"
+
+  - name: offer-tracker-dependencies
+    rules:
+      - alert: OfferTrackerAiProviderErrors
+        expr: sum(rate(http_server_requests_seconds_count{application="offer-tracker",uri=~"/api/ai/.*",status=~"4..|5.."}[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI 接口错误率升高"
+          description: "AI 接口持续出现错误，检查供应商状态、超时和用户限流。"
+
+      - alert: OfferTrackerAiTaskDeadLetters
+        expr: increase(offer_tracker_ai_tasks_dead_letter_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "异步 AI 任务进入死信"
+          description: "过去 10 分钟有 AI 任务超过重试上限，需检查 provider 错误和任务 payload。"

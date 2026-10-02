@@ -28,6 +28,12 @@ java -jar target/offer-tracker-0.1.0.jar
 - Swagger：http://localhost:8080/swagger-ui.html
 - H2 控制台：http://localhost:8080/h2-console
 
+## 登录认证
+
+生产环境使用手机号 + 密码注册/登录，注册成功后会直接建立 Sa-Token 会话；浏览器会保存会话令牌，并在 API 请求中使用 Bearer 认证。生产会话存放在 Redis，默认有效期为 30 天；本地开发使用进程内会话。
+
+当前手机号只是登录名，注册时不会验证号码归属，也没有密码找回。公开开放注册前，必须先接入短信验证，或限制为邀请注册并提供可靠的账号恢复流程。切换到 Sa-Token 后，先前签发的 JWT 会话需要重新登录。
+
 ## Windows 便携版
 
 安装 JDK 21 后可在 Windows PowerShell 中构建内置 Java 运行环境的免安装版本：
@@ -39,6 +45,46 @@ java -jar target/offer-tracker-0.1.0.jar
 产物位于 `dist/OfferTracker-Windows-x64-<version>.zip`。用户解压后双击
 `OfferTracker.exe` 即可；程序会自动选择空闲端口、打开默认浏览器，并通过系统托盘提供
 “打开”和“退出”操作。便携版数据保存在 `%LOCALAPPDATA%\OfferTracker\data`，不会写入安装目录。
+
+## AI 面试增强版
+
+`ai-interview` 分支是在基础投递看板上增加 AI 面试能力的增强版本；基础版不依赖 AI 服务，也可以独立使用公司、投递、看板、统计、日历和备份功能。
+
+### 配置 AI 服务
+
+启动应用后，打开右上角的“AI 设置”，填写服务地址、模型名称和 API Key。服务地址必须是 OpenAI 兼容 Chat Completions 接口，例如 `https://api.deepseek.com/v1`；模型名称必须是服务商实际支持的模型。项目支持 DeepSeek、OpenAI、通义等兼容服务，费用、速率限制和数据处理规则以所选服务商为准。
+
+API Key 只保存在本机数据目录，页面只显示脱敏后的 Key，不会提交到 GitHub。不要把 API Key 写入代码、提交到仓库或发送到聊天中。
+
+### 开始一次 AI 面试
+
+1. 在“简历管理”中上传文字版 PDF 简历。
+2. 在简历记录上点击“AI 面试”；如需岗位定制，可同时选择对应的投递记录。
+3. 首题会参考简历以及公司、岗位、城市和薪资信息生成。
+4. 提交回答后点击“获取 AI 评分”，评分完成后可以生成下一道追问。
+5. 使用“上一题/下一题”查看本次面试的全部题目、回答和评分。
+6. 至少完成一道题的 AI 评分后，点击“结束面试并生成总结”。结束后的面试为只读状态。
+
+开始面试前，页面会提示简历文本和后续回答将发送给你配置的 AI 服务商；请确认服务商的数据处理政策后再继续。
+
+### 历史记录和数据保留
+
+- AI 面试会保存题目、回答、评分、反馈和总结，便于复盘。
+- 删除简历文件或简历记录**不会删除**关联的 AI 面试历史。
+- 清除 AI 配置只删除本机保存的服务地址、模型和 API Key，不会删除已有面试记录。
+- 默认 H2 数据、简历文件和 AI 配置位于 `data/` 目录；Windows 便携版位于 `%LOCALAPPDATA%\OfferTracker\data`。备份时请保留整个数据目录。
+
+### AI 配置文件位置
+
+通常不需要环境变量；如需调整位置，可在启动前设置：
+
+```powershell
+$env:AI_CONFIG_FILE = 'D:\OfferTrackerData\ai-config.json'
+$env:RESUME_STORAGE_DIR = 'D:\OfferTrackerData\resumes'
+java -jar target/offer-tracker-0.1.0.jar
+```
+
+AI 配置文件包含敏感凭据，应限制文件访问权限，不要加入 JSON 备份、日志或版本控制。
 
 ## 开发模式
 
@@ -126,10 +172,39 @@ docker run --name offer-tracker -p 8080:8080 \
 
 数据卷 `offer-tracker-data` 对应容器内的 `/app/data`。删除容器不会删除该卷；需要备份时应单独备份此卷。
 
+## 公网生产启动
+
+公网部署必须使用 MySQL、Redis 与 `production` profile。先在密钥管理系统中配置 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`REDIS_HOST`、`REDIS_PASSWORD`、`AI_CONFIG_ENCRYPTION_KEY` 和对象存储的 `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`；AI 加密密钥至少 32 个字符，需备份并保持稳定。Sa-Token 会话由 Redis 共享。Redis 默认启用 TLS，可通过 `REDIS_SSL_ENABLED=false` 覆盖；ACL 用户名可用 `REDIS_USERNAME` 配置。对象存储凭据使用 AWS SDK 默认凭据链（例如注入 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或实例角色）。生产 profile 强制启用认证；若任何配置将 `AUTH_REQUIRED` / `offer-tracker.auth.required` 设为 `false`，应用会拒绝启动：
+
+生产环境中的用户 AI 服务地址必须使用 HTTPS 域名；应用拒绝 localhost 和 IP 字面量，但部署仍须在网络层禁止访问内网、链路本地地址及云元数据地址，以防用户控制的域名解析到内部网络。
+
+```bash
+java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
+```
+
+生产实例的业务端口为 `8080`，管理端口默认为 `8081`（可用 `MANAGEMENT_PORT` 修改）。负载均衡器使用 `/actuator/health/readiness` 检查就绪，`/actuator/health/liveness` 用于存活检查；Prometheus 从 `/actuator/prometheus` 抓取指标。管理端口只应对负载均衡器、编排平台和监控网络开放，不应映射到公网。AI 请求超时可用 `AI_CONNECT_TIMEOUT` 和 `AI_REQUEST_TIMEOUT` 调整，默认分别为 10 秒和 90 秒；生产环境 AI 生成/评分接口默认按用户限流为每分钟 10 次，可通过 `AI_REQUESTS_PER_MINUTE` 调整。同步 AI 接口不会对计费 POST 请求做盲目自动重试；异步任务 worker 会对失败任务最多尝试 3 次（包含首次），投递与执行语义为至少一次。如果供应商已处理请求但应用未能持久化结果，后续重试可能再次调用并产生额外费用；调用方应使用稳定的幂等键，运维方应监控重试和死信指标。
+
+Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts.yml)，部署时需接入现有 Prometheus/Alertmanager，并根据真实流量调整阈值。
+
+备份恢复演练步骤见 [恢复演练 Runbook](docs/ops/restore-drill.md)。演练必须在隔离环境执行，不会自动删除源数据库、对象存储或历史文件。
+
+只读容量测试基线见 [k6 容量测试说明](docs/ops/capacity-test.md)，默认不写入业务数据、不发送短信、不调用计费 AI 接口。
+
+异步 AI 任务通过 `POST /api/ai/tasks` 提交，通过 `GET /api/ai/tasks/{id}` 查询；请求必须携带登录令牌和调用方生成的幂等键（最多 128 个字符）。目前支持 `GENERATE_QUESTION`（`resumeId`，可选 `applicationId`）、`EVALUATE_ANSWER` / `FOLLOW_UP`（`sessionId`、`questionId`）和 `FINISH_INTERVIEW`（`sessionId`）；所有 ID 必须为正整数，payload 仅允许对应字段且不超过 4 KiB。生产 worker 使用 Redis Streams，任务状态以 MySQL 为准，失败任务会有限重试并进入死信流。
+
+应用还会对 `/api/auth/**` 执行共享 Redis IP 限流（默认每个客户端 IP 每分钟 60 次）。如果应用位于反向代理后面，请通过 `TRUSTED_PROXY_CIDRS` 配置代理的 CIDR（多个网段用逗号分隔），例如 `10.0.0.0/8,192.168.0.0/16`。只有直接连接地址命中这些网段时，应用才会从 `X-Forwarded-For` 解析客户端 IP；未配置或直连来源不可信时会忽略该请求头。必须阻止公网绕过负载均衡器直连应用端口，否则攻击者可以伪造代理来源。
+
+不要在公网部署中使用默认 H2 或本地加密密钥。生产注册暂时是手机号 + 密码，不验证手机号所有权；用户可占用他人号码作为登录名，因此公开开放注册前必须接入短信验证或改为受控邀请注册。当前没有短信验证与密码找回流程。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
+
+当前认证使用手机号作为登录名、密码登录和 Sa-Token 会话；登录失败会限流。手机号暂未验证，短信验证、密码找回和账号恢复列为后续工作，未完成前不应将开放注册用于公网正式服务。短信接入注意事项见[短信适配器后续方案](docs/ops/sms-adapter.md)。
+
 ## API 一览
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| POST | `/api/auth/register` | 手机号 + 密码注册并登录 |
+| POST | `/api/auth/login` | 手机号 + 密码登录，返回 Bearer token |
+| POST | `/api/auth/logout` | 注销当前 Sa-Token 会话 |
 | POST | `/api/companies` | 新增公司 |
 | GET | `/api/companies` | 公司列表 |
 | PUT | `/api/companies/{id}` | 编辑公司 |
@@ -148,6 +223,20 @@ docker run --name offer-tracker -p 8080:8080 \
 | GET | `/api/data/export.csv` | 下载投递 CSV |
 | POST | `/api/data/import/validate` | 预检 JSON 备份 |
 | POST | `/api/data/import` | 追加或替换恢复 JSON 备份 |
+| POST | `/api/resumes` | 上传 PDF 简历 |
+| GET | `/api/resumes` | 查询简历列表 |
+| GET | `/api/resumes/{id}/file` | 下载简历文件 |
+| DELETE | `/api/resumes/{id}` | 删除简历文件和记录，但保留 AI 面试历史 |
+| GET | `/api/ai/config` | 查询 AI 配置状态和脱敏 Key |
+| PUT | `/api/ai/config` | 保存 OpenAI 兼容服务配置 |
+| DELETE | `/api/ai/config` | 清除本机 AI 配置 |
+| POST | `/api/ai/interviews` | 创建 AI 面试并生成首题 |
+| GET | `/api/ai/interviews?resumeId={id}` | 查询简历关联的 AI 面试历史 |
+| GET | `/api/ai/interviews/{id}` | 查看全部题目、回答和评分 |
+| PUT | `/api/ai/interviews/{sessionId}/questions/{questionId}/answer` | 保存回答 |
+| POST | `/api/ai/interviews/{sessionId}/questions/{questionId}/evaluate` | 请求 AI 评分 |
+| POST | `/api/ai/interviews/{sessionId}/questions/{questionId}/follow-up` | 生成下一道追问 |
+| POST | `/api/ai/interviews/{sessionId}/finish` | 结束面试并生成总结 |
 
 状态可以根据实际情况自由调整：`SAVED / APPLIED / WRITTEN_TEST / INTERVIEWING / OFFER / REJECTED / WITHDRAWN`。
 
@@ -192,7 +281,7 @@ web/              Vue 前端
 - [ ] 面试前提醒（定时任务 + 邮件/Webhook）
 - [ ] 从招聘网站 URL 自动解析公司与岗位
 - [ ] Excel 导入与逐行错误报告
-- [ ] 多用户与登录认证（Spring Security + JWT）
+- [ ] 手机号所有权验证与账号找回（短信服务商尚未接入）
 
 ## License
 
