@@ -178,6 +178,8 @@ java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,producti
 
 Prometheus 告警规则模板见 [生产告警规则](docs/ops/prometheus-alerts.yml)，部署时需接入现有 Prometheus/Alertmanager，并根据真实流量调整阈值。
 
+备份恢复演练步骤见 [恢复演练 Runbook](docs/ops/restore-drill.md)。演练必须在隔离环境执行，不会自动删除源数据库、对象存储或历史文件。
+
 应用还会对 `/api/auth/**` 执行共享 Redis IP 限流（默认每个客户端 IP 每分钟 60 次）。如果应用位于反向代理后面，请通过 `TRUSTED_PROXY_CIDRS` 配置代理的 CIDR（多个网段用逗号分隔），例如 `10.0.0.0/8,192.168.0.0/16`。只有直接连接地址命中这些网段时，应用才会从 `X-Forwarded-For` 解析客户端 IP；未配置或直连来源不可信时会忽略该请求头。必须阻止公网绕过负载均衡器直连应用端口，否则攻击者可以伪造代理来源。
 
 不要在公网部署中使用默认 H2 或本地 JWT/加密密钥。生产 profile 默认启用 S3 兼容简历存储，可通过 `RESUME_STORAGE_TYPE=local` 覆盖，但本地磁盘不适用于无共享存储的多实例部署。已有简历使用本地文件 locator，切换 S3 前必须先迁移对象并更新数据库 locator，不能只修改配置。上线前需实际验证对象存储权限、连通性、备份和生命周期策略。升级含历史数据的实例前，必须按 [历史数据归属切换说明](docs/LEGACY-DATA-CUTOVER.md) 明确旧数据所有者；不要让首个注册用户自动认领。
