@@ -16,6 +16,21 @@ This document records the rules for the productionization work. It is a baseline
 | Analytics | Aggregated application statistics | Owner-scoped when authenticated |
 | Data Transfer | JSON backup, restore, and CSV export | Owner-scoped when authenticated |
 
+## Delivery Phase Status
+
+The target is a production-capable modular monolith sized through staged measurements, not an unsubstantiated million-user guarantee. “Implemented” means repository code and automated tests exist; it does not mean a live deployment or provider has been accepted.
+
+| Phase | Scope | Status | Evidence / remaining gate |
+| --- | --- | --- | --- |
+| 0. Architecture and domain baseline | Modular monolith, canonical terms, explicit constraints | Implemented | ADR 0001, `CONTEXT.md`, and this baseline |
+| 1. Identity and ownership | Phone-code contract, JWT/refresh rotation, owner isolation, encrypted per-user AI keys | Implemented in code | Real SMS provider delivery/security rehearsal and per-install legacy ownership cutover remain |
+| 2. Multi-instance foundations | MySQL, Redis-shared limits, S3-compatible storage adapter, controlled legacy file migration | Implemented in code | Select and verify actual providers; run object compatibility, backup, and restore drills |
+| 3. Operations and security | Health probes, request IDs, metrics, alert templates, proxy trust controls, read-only load baseline | Implemented in code/docs | Configure deployment monitoring and secrets, route alerts, define RPO/RTO, and record staged capacity results |
+| 4. Asynchronous AI tasks | MySQL outbox, owner-scoped idempotent API, Redis Streams worker, lease recovery, bounded retries, dead letters | Core implemented | Add worker-level MySQL/Redis failure and duplicate-delivery integration evidence; verify live provider timeout/retry billing behavior; confirm the GitHub CI run |
+| 5. Deployment acceptance | Runbook-based release, recovery rehearsal, provider and capacity sign-off | Not yet accepted | Requires a staging/production account, chosen SMS/storage/AI providers, credentials, and operator evidence |
+
+No phase claims a million-user capacity target. Establish the supported workload from measured RPS, latency, error rate, database/Redis saturation, and cost in an isolated staging environment before setting a public capacity claim.
+
 ## Current Production Gaps
 
 - Start public deployments with `--spring.profiles.active=mysql,production`. The `production` profile requires MySQL and Redis credentials plus both independent secrets, and forces authentication unless explicitly overridden.
@@ -25,13 +40,13 @@ This document records the rules for the productionization work. It is a baseline
 - Use a managed MySQL service. The default profile remains local H2.
 - Resume files can use the S3-compatible adapter for multi-instance deployments; configure the provider endpoint, region, and bucket, and provide credentials through the AWS SDK default credential chain. Verify the chosen provider's compatibility, access policy, lifecycle, and backup behavior before go-live.
 - Existing resume files have local filesystem locators. Before switching an existing installation to S3, migrate each object and update its database locator during a controlled cutover; do not change `RESUME_STORAGE_TYPE` alone. The migration CLI is implemented, but provider-specific live compatibility testing and a full restore rehearsal remain before go-live.
-- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production login attempts are also atomically limited to five attempts per phone in a 15-minute window and cleared after successful login. AI generation/scoring calls are limited to 10 per authenticated user per minute by default (`AI_REQUESTS_PER_MINUTE`), shared through Redis across instances. Authentication endpoints also have a shared Redis limit of 60 requests per minute per client IP. Configure `TRUSTED_PROXY_CIDRS` with the reverse-proxy CIDRs; only connections from those CIDRs may supply the client IP through `X-Forwarded-For`, and direct public access to the application port must be blocked. Alert templates, restore rehearsal documentation, and a read-only capacity-test baseline are now provided; they still require deployment-specific execution and sign-off. Asynchronous AI jobs remain a future phase.
+- SMS request throttling is shared through Redis (1 request/minute, 5/hour, 10/day per normalized phone number); Redis is required by the production profile. Production login attempts are also atomically limited to five attempts per phone in a 15-minute window and cleared after successful login. AI generation/scoring calls are limited to 10 per authenticated user per minute by default (`AI_REQUESTS_PER_MINUTE`), shared through Redis across instances. Authentication endpoints also have a shared Redis limit of 60 requests per minute per client IP. Configure `TRUSTED_PROXY_CIDRS` with the reverse-proxy CIDRs; only connections from those CIDRs may supply the client IP through `X-Forwarded-For`, and direct public access to the application port must be blocked. Alert templates, restore rehearsal documentation, and a read-only capacity-test baseline are provided; they still require deployment-specific execution and sign-off.
 - A starter Prometheus alert set is provided at `docs/ops/prometheus-alerts.yml`. Import it into the monitoring stack, configure the readiness probe job label, and route critical alerts to on-call. Thresholds are initial baselines, not capacity guarantees; tune them after collecting production traffic and latency distributions.
-- A restore rehearsal procedure is provided at `docs/ops/restore-drill.md`. It is intentionally manual and non-destructive: MySQL is authoritative, Redis is rebuilt empty, resume objects are checksum-verified, and the source environment is retained.
+- A restore rehearsal procedure is provided at `docs/ops/restore-drill.md`. It is intentionally manual and non-destructive: MySQL is authoritative, Redis may be rebuilt empty and pending AI deliveries are replayed from the outbox, resume objects are checksum-verified, and the source environment is retained.
 - A read-only k6 capacity baseline is provided at `docs/ops/k6-readonly-smoke.js` with execution notes in `docs/ops/capacity-test.md`. It is not a million-user claim; use staged tests to establish measured limits.
-- Redis Streams queue publishing has a container-backed integration test; worker lease recovery and dead-letter behavior still require the deployment rehearsal described in `docs/ops/restore-drill.md`.
+- Redis Streams queue publishing has a container-backed integration test. Outbox selection/recovery has H2 integration coverage and worker claim state has unit coverage; end-to-end worker lease recovery, dead-letter behavior, and duplicate delivery still need a worker-level MySQL/Redis integration test and deployment rehearsal described in `docs/ops/restore-drill.md`.
 - The vendor-neutral SMS adapter contract is documented in `docs/ops/sms-adapter.md`; production still requires a real provider implementation and delivery rehearsal before registration is opened publicly.
-- ADR 0002 records the accepted first-phase design for asynchronous AI tasks. The initial task table, owner-scoped idempotent API, Redis Streams worker, lease recovery, bounded retries, and dead-letter stream are implemented; a Redis-backed integration rehearsal and provider-specific billing/retry verification remain before declaring the async phase complete.
+- ADR 0002 records the accepted first-phase design for asynchronous AI tasks. Task submission is idempotent within an owner, but Redis delivery and provider execution are at-least-once: an expired lease or lost Redis state can cause a provider call to repeat. The AI provider adapter has no provider-neutral idempotency guarantee, so retries may incur duplicate charges. Do not claim exactly-once execution or duplicate-billing prevention.
 
 ## Required Production Interfaces
 
@@ -94,9 +109,6 @@ java -jar target/offer-tracker-0.1.0.jar \
 
 Review the per-table counts, then repeat with `--apply` during the cutover window. The command only updates rows whose `owner_id` is still `NULL` in `companies`, `job_applications`, `resumes`, and `ai_interview_sessions`; it never changes already-owned records and never infers an owner from registration order. Verify authenticated access and the backup before reopening traffic.
 
-## Phase 0 Exit Criteria
+## Release Gate
 
-- `CONTEXT.md` contains the canonical domain terms and invariants.
-- ADR 0001 records the modular-monolith decision and its trade-offs.
-- This baseline identifies current capabilities separately from planned production work.
-- The next phase can implement identity and ownership without redefining domain vocabulary.
+Do not enable public registration until a real SMS adapter is selected and tested, the production profile is verified with managed MySQL and Redis, trusted proxy CIDRs and network boundaries are configured, legacy ownership is reviewed and migrated where applicable, backups and object restoration are proven, alerts reach an operator, and staging load results establish an explicit supported workload. Keep the source environment and historical data intact during rehearsal and cutover.

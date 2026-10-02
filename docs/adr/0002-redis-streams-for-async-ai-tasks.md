@@ -9,7 +9,7 @@ AI generation and scoring currently run synchronously inside HTTP requests. Prov
 
 ## Decision
 
-Use Redis Streams as the initial task transport behind an application-owned task interface. Persist the task state in MySQL and use the stream only as a delivery mechanism. Every task has an owner, operation type, idempotency key, attempt count, lease expiry, and terminal result or error. Consumers acknowledge a message only after the MySQL state transition and provider operation have been durably recorded. Expired leases are eligible for bounded redelivery; exhausted attempts move to a dead-letter stream and a terminal `FAILED` state.
+Use Redis Streams as the initial task transport behind an application-owned task interface. Persist task state in MySQL and use the stream only as a delivery mechanism. Every task has an owner, operation type, idempotency key, attempt count, lease expiry, and terminal result or error. The MySQL outbox transitions through `NEW`, `DISPATCHING`, and `PUBLISHED`; stale unclaimed deliveries are retried so pending tasks can be reconstructed after Redis data loss. Conditional task claims prevent duplicate deliveries from running concurrently. Expired worker leases are eligible for bounded redelivery; exhausted attempts move to a dead-letter stream and a terminal `FAILED` state.
 
 The HTTP API submits a task and returns a task identifier. Clients poll a read-only task status endpoint. Existing synchronous endpoints remain available during the migration and are not silently changed to fire-and-forget.
 
@@ -19,7 +19,7 @@ Positive:
 
 - Reuses the existing Redis dependency and supports horizontal consumers.
 - MySQL remains the source of truth for ownership, status, and audit history.
-- Explicit idempotency and leases prevent duplicate provider billing during normal retries.
+- Owner-scoped idempotency prevents duplicate task records for the same submission key; conditional claims reduce concurrent duplicate execution.
 - RabbitMQ or Kafka can replace the transport behind the same task interface later.
 
 Costs and limits:
@@ -27,6 +27,7 @@ Costs and limits:
 - The application must implement consumer groups, claiming, leases, redelivery, and dead-letter handling.
 - Redis persistence and memory policy become part of the task durability review.
 - This is not a replacement for a dedicated workflow engine or a guarantee against provider-side duplicate billing.
+- Delivery and provider execution are at-least-once. If a provider call succeeds but its result is not durably recorded before a crash or lease expiry, it can be called again and billed again. No exactly-once or duplicate-charge prevention guarantee is made without provider-supported idempotency.
 
 ## Rejected alternatives
 
@@ -40,4 +41,5 @@ Costs and limits:
 - Redis Stream publisher and consumer group bootstrap.
 - Idempotent submission, bounded retries, lease recovery, and dead-letter handling.
 - Status endpoint and metrics for queue depth, age, retries, failures, and provider latency.
-- Integration tests with MySQL and Redis, plus a provider-mocked duplicate-delivery test.
+- Automated outbox selection/recovery and worker state-transition tests.
+- Container-backed worker integration, Redis-loss recovery, and provider-mocked duplicate-delivery verification before operational acceptance.

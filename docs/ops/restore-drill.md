@@ -6,7 +6,7 @@ This runbook is a rehearsal procedure, not an automatic cleanup job. Perform it 
 
 - Define an owner-approved RPO (maximum acceptable data loss) and RTO (maximum acceptable recovery time) before the drill.
 - Record the backup timestamps, Flyway version, application image digest, and object-storage prefix used by the rehearsal.
-- Treat MySQL as the system of record. Redis is disposable cache/rate-limit state and must not be restored as authoritative data.
+- Treat MySQL as the system of record. Redis contains shared rate-limit state and AI task delivery records; it may be rebuilt empty because pending task state remains in MySQL and the outbox re-dispatches unclaimed deliveries after `AI_TASK_DISPATCH_RETRY_DELAY` (default one minute). Redis is not an authoritative task ledger.
 
 ## Before the drill
 
@@ -20,7 +20,7 @@ This runbook is a rehearsal procedure, not an automatic cleanup job. Perform it 
 1. Restore the MySQL backup into the isolated database and run the application with `mysql,production` against it.
 2. Let Flyway apply only pending migrations; stop if a migration fails and preserve the database for investigation.
 3. Restore resume objects to the configured bucket/prefix and verify object counts and checksums against the backup manifest.
-4. Start Redis empty and verify that the readiness endpoint becomes healthy after Redis is reachable.
+4. Start Redis empty and verify that the readiness endpoint becomes healthy after Redis is reachable. Confirm the production worker creates its consumer group and that old `PENDING` MySQL tasks with a previously published delivery are re-enqueued after the configured retry delay.
 5. Run authenticated smoke checks: login/refresh rotation, company and application ownership, resume download, interview history, and AI configuration isolation.
 6. Run the data export endpoint and compare record counts with the pre-drill manifest. Do not compare secrets or raw AI credentials.
 7. Verify `/actuator/health/liveness`, `/actuator/health/readiness`, and Prometheus scraping from the management network only.
@@ -34,4 +34,4 @@ This runbook is a rehearsal procedure, not an automatic cleanup job. Perform it 
 
 ## AI task queue checks
 
-During the rehearsal, verify that the Redis consumer group `offer-tracker-ai-workers` can consume a test task, that a worker restart recovers an expired lease, and that a task after the retry limit appears in `offer-tracker:ai-tasks:dead-letter`. The MySQL `ai_tasks` row is authoritative; Redis stream entries are delivery state and must not be treated as the only audit record.
+During the rehearsal, verify that the Redis consumer group `offer-tracker-ai-workers` can consume a test task, an empty Redis stream is rebuilt from an old `PENDING` MySQL task, a worker restart recovers an expired lease, and a task after the retry limit appears in `offer-tracker:ai-tasks:dead-letter`. The MySQL `ai_tasks` row is authoritative; Redis stream entries are delivery state and must not be treated as the only audit record. Confirm provider call counts separately: delivery is at-least-once and a repeated billable request is possible after a crash or lease expiry.

@@ -18,6 +18,7 @@ import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -45,19 +46,36 @@ public class RedisAiTaskWorker {
     private final ObjectMapper objectMapper;
     private final MeterRegistry metrics;
     private final String consumer = "worker-" + UUID.randomUUID();
+    private volatile boolean groupReady;
 
     public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, ObjectMapper objectMapper, MeterRegistry metrics) {
         this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.objectMapper = objectMapper; this.metrics = metrics;
     }
 
     @PostConstruct
-    void ensureGroup() {
-        try { redis.opsForStream().createGroup(STREAM, ReadOffset.latest(), GROUP); }
-        catch (Exception ex) { log.debug("AI task consumer group already exists or stream is unavailable", ex); }
+    void initializeGroup() {
+        ensureGroup();
+    }
+
+    boolean ensureGroup() {
+        if (groupReady) return true;
+        try {
+            redis.execute((RedisCallback<String>) connection -> connection.streamCommands().xGroupCreate(
+                    redis.getStringSerializer().serialize(STREAM), GROUP, ReadOffset.latest(), true));
+            groupReady = true;
+        } catch (Exception ex) {
+            if (isExistingGroup(ex)) {
+                groupReady = true;
+            } else {
+                log.debug("AI task consumer group is not ready; initialization will be retried", ex);
+            }
+        }
+        return groupReady;
     }
 
     @Scheduled(fixedDelayString = "${offer-tracker.ai.task-poll-delay:1000}")
     void poll() {
+        if (!ensureGroup()) return;
         recoverExpiredLeases();
         List<MapRecord<String, Object, Object>> records = redis.opsForStream().read(
                 Consumer.from(GROUP, consumer),
@@ -122,7 +140,7 @@ public class RedisAiTaskWorker {
         } finally { CurrentUserContext.clear(); acknowledge(record); }
     }
 
-    private boolean claim(AiTask task) {
+    boolean claim(AiTask task) {
         if (!"PENDING".equals(task.getStatus()) || task.getAvailableAt() != null && task.getAvailableAt().isAfter(LocalDateTime.now())) return false;
         AiTask update = new AiTask(); update.setStatus("PROCESSING"); update.setDispatchStatus("PUBLISHED"); update.setAttempts(task.getAttempts() + 1); update.setLeaseUntil(LocalDateTime.now().plus(LEASE)); update.setUpdatedAt(LocalDateTime.now());
         return tasks.update(update, new LambdaUpdateWrapper<AiTask>()
@@ -137,4 +155,11 @@ public class RedisAiTaskWorker {
 
     private Long optionalLong(JsonNode payload, String name) { return payload.hasNonNull(name) ? payload.get(name).asLong() : null; }
     private void acknowledge(MapRecord<String, Object, Object> record) { redis.opsForStream().acknowledge(STREAM, GROUP, record.getId()); }
+
+    private boolean isExistingGroup(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause.getMessage() != null && cause.getMessage().contains("BUSYGROUP")) return true;
+        }
+        return false;
+    }
 }
