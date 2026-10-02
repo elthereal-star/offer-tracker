@@ -31,6 +31,13 @@ class ClientIpResolverTest {
         assertEquals("198.51.100.8", resolver.resolve(request));
     }
 
+    @Test
+    void ignoresHostnamesInForwardedHeader() {
+        ClientIpResolver resolver = new ClientIpResolver(new TrustedProxyProperties(List.of("10.0.0.0/8")));
+        MockHttpServletRequest request = request("10.0.0.5", "localhost");
+        assertEquals("10.0.0.5", resolver.resolve(request));
+    }
+
     private MockHttpServletRequest request(String remote, String forwarded) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr(remote);
