@@ -107,7 +107,7 @@ public class RedisAiTaskWorker {
         }
     }
 
-    private void process(MapRecord<String, Object, Object> record) {
+    void process(MapRecord<String, Object, Object> record) {
         Object rawId = record.getValue().get("taskId");
         if (rawId == null) { acknowledge(record); return; }
         AiTask task = tasks.selectById(Long.valueOf(rawId.toString()));
