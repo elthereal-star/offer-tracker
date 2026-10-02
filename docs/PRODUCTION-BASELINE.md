@@ -30,7 +30,7 @@ This document records the rules for the productionization work. It is a baseline
 - A restore rehearsal procedure is provided at `docs/ops/restore-drill.md`. It is intentionally manual and non-destructive: MySQL is authoritative, Redis is rebuilt empty, resume objects are checksum-verified, and the source environment is retained.
 - A read-only k6 capacity baseline is provided at `docs/ops/k6-readonly-smoke.js` with execution notes in `docs/ops/capacity-test.md`. It is not a million-user claim; use staged tests to establish measured limits.
 - The vendor-neutral SMS adapter contract is documented in `docs/ops/sms-adapter.md`; production still requires a real provider implementation and delivery rehearsal before registration is opened publicly.
-- ADR 0002 records the accepted first-phase design for asynchronous AI tasks. The task transport and worker implementation remain an open production gate until its exit criteria are verified.
+- ADR 0002 records the accepted first-phase design for asynchronous AI tasks. The initial task table, owner-scoped idempotent API, Redis Streams worker, lease recovery, bounded retries, and dead-letter stream are implemented; a Redis-backed integration rehearsal and provider-specific billing/retry verification remain before declaring the async phase complete.
 
 ## Required Production Interfaces
 

@@ -1,6 +1,7 @@
 package com.offertracker.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.offertracker.common.CurrentUser;
@@ -34,7 +35,9 @@ public class RedisAiTaskWorker {
     private static final Logger log = LoggerFactory.getLogger(RedisAiTaskWorker.class);
     private static final String STREAM = RedisAiTaskQueue.STREAM;
     private static final String GROUP = "offer-tracker-ai-workers";
+    private static final String DEAD_LETTER_STREAM = "offer-tracker:ai-tasks:dead-letter";
     private static final int MAX_ATTEMPTS = 3;
+    private static final Duration LEASE = Duration.ofMinutes(5);
     private final StringRedisTemplate redis;
     private final AiTaskMapper tasks;
     private final AiInterviewService interviews;
@@ -53,12 +56,26 @@ public class RedisAiTaskWorker {
 
     @Scheduled(fixedDelayString = "${offer-tracker.ai.task-poll-delay:1000}")
     void poll() {
+        recoverExpiredLeases();
         List<MapRecord<String, Object, Object>> records = redis.opsForStream().read(
                 Consumer.from(GROUP, consumer),
                 StreamReadOptions.empty().count(10).block(Duration.ofMillis(500)),
                 org.springframework.data.redis.connection.stream.StreamOffset.create(STREAM, ReadOffset.lastConsumed()));
         if (records == null) return;
         for (MapRecord<String, Object, Object> record : records) process(record);
+    }
+
+    @Scheduled(fixedDelayString = "${offer-tracker.ai.task-lease-scan-delay:30000}")
+    void recoverExpiredLeases() {
+        List<AiTask> expired = tasks.selectList(new LambdaQueryWrapper<AiTask>()
+                .eq(AiTask::getStatus, "PROCESSING")
+                .lt(AiTask::getLeaseUntil, LocalDateTime.now()));
+        for (AiTask task : expired) {
+            task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
+            task.setLeaseUntil(null); task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
+            if ("PENDING".equals(task.getStatus())) publish(task);
+            else publishDeadLetter(task);
+        }
     }
 
     private void process(MapRecord<String, Object, Object> record) {
@@ -76,21 +93,31 @@ public class RedisAiTaskWorker {
                 case "FINISH_INTERVIEW" -> interviews.finish(payload.path("sessionId").asLong());
                 default -> throw new IllegalArgumentException("unsupported AI task type: " + task.getTaskType());
             };
-            task.setStatus("SUCCEEDED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null);
+            task.setStatus("SUCCEEDED"); task.setResult(objectMapper.writeValueAsString(result)); task.setErrorMessage(null); task.setLeaseUntil(null);
             task.setUpdatedAt(LocalDateTime.now()); tasks.updateById(task);
         } catch (Exception ex) {
             task.setAttempts(task.getAttempts() + 1); task.setUpdatedAt(LocalDateTime.now());
             task.setErrorMessage(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
             task.setStatus(task.getAttempts() >= MAX_ATTEMPTS ? "FAILED" : "PENDING");
+            task.setLeaseUntil(null);
             tasks.updateById(task);
-            if ("PENDING".equals(task.getStatus())) redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord().in(STREAM).ofMap(java.util.Map.of("taskId", task.getId().toString(), "taskType", task.getTaskType())));
+            if ("PENDING".equals(task.getStatus())) publish(task); else publishDeadLetter(task);
         } finally { CurrentUserContext.clear(); acknowledge(record); }
     }
 
     private boolean claim(AiTask task) {
         if (!"PENDING".equals(task.getStatus()) || task.getAvailableAt() != null && task.getAvailableAt().isAfter(LocalDateTime.now())) return false;
-        AiTask update = new AiTask(); update.setStatus("PROCESSING"); update.setAttempts(task.getAttempts() + 1); update.setUpdatedAt(LocalDateTime.now());
+        AiTask update = new AiTask(); update.setStatus("PROCESSING"); update.setAttempts(task.getAttempts() + 1); update.setLeaseUntil(LocalDateTime.now().plus(LEASE)); update.setUpdatedAt(LocalDateTime.now());
         return tasks.update(update, new LambdaUpdateWrapper<AiTask>().eq(AiTask::getId, task.getId()).eq(AiTask::getStatus, "PENDING")) == 1;
+    }
+
+    private void publish(AiTask task) {
+        redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord().in(STREAM).ofMap(java.util.Map.of("taskId", task.getId().toString(), "taskType", task.getTaskType())));
+    }
+
+    private void publishDeadLetter(AiTask task) {
+        redis.opsForStream().add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord().in(DEAD_LETTER_STREAM).ofMap(
+                java.util.Map.of("taskId", task.getId().toString(), "taskType", task.getTaskType(), "error", task.getErrorMessage() == null ? "lease expired" : task.getErrorMessage())));
     }
 
     private Long optionalLong(JsonNode payload, String name) { return payload.hasNonNull(name) ? payload.get(name).asLong() : null; }
