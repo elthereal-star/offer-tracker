@@ -50,6 +50,7 @@ offer-tracker:
   ai:
     connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
     request-timeout: ${AI_REQUEST_TIMEOUT:90s}
+    task-poll-delay: ${AI_TASK_POLL_DELAY:1000}
   auth:
     jwt-secret: ${JWT_SECRET}
     required: ${AUTH_REQUIRED:true}
