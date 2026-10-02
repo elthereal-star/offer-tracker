@@ -26,15 +26,16 @@ public class AiConfigService {
     private static final int GCM_TAG_BITS = 128;
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbc;
+    private final AiProviderEndpointPolicy endpointPolicy;
     private final Path configPath;
     private final SecretKeySpec encryptionKey;
     private final SecureRandom random = new SecureRandom();
 
-    public AiConfigService(ObjectMapper objectMapper, JdbcTemplate jdbc,
+    public AiConfigService(ObjectMapper objectMapper, JdbcTemplate jdbc, AiProviderEndpointPolicy endpointPolicy,
                            @Value("${offer-tracker.storage.ai-config-file:./data/ai-config.json}") String configPath,
                            @Value("${offer-tracker.auth.config-encryption-key}") String encryptionSecret,
                            @Value("${offer-tracker.auth.required:false}") boolean authRequired) {
-        this.objectMapper = objectMapper; this.jdbc = jdbc;
+        this.objectMapper = objectMapper; this.jdbc = jdbc; this.endpointPolicy = endpointPolicy;
         this.configPath = Path.of(configPath).toAbsolutePath().normalize();
         if (encryptionSecret == null || encryptionSecret.length() < 32) throw new IllegalArgumentException("AI_CONFIG_ENCRYPTION_KEY must be at least 32 characters");
         if (authRequired && encryptionSecret.startsWith("local-development-only-")) {
@@ -49,7 +50,7 @@ public class AiConfigService {
     public synchronized AiConfigResponse save(AiConfigRequest request) {
         String key = blankToNull(request.apiKey()); StoredConfig old = currentUserId() == null ? readFile() : readUser(currentUserId());
         if (key == null && old != null) key = old.apiKey(); if (key == null) throw new BusinessException(400, "API Key 不能为空");
-        StoredConfig c = new StoredConfig(request.baseUrl().trim().replaceAll("/+$", ""), request.model().trim(), key);
+        StoredConfig c = new StoredConfig(endpointPolicy.normalize(request.baseUrl()), request.model().trim(), key);
         if (currentUserId() == null) writeFile(c); else writeUser(currentUserId(), c); return view();
     }
 
@@ -60,7 +61,8 @@ public class AiConfigService {
 
     public synchronized StoredConfig requireStored() {
         StoredConfig c = currentUserId() == null ? readFile() : readUser(currentUserId());
-        if (c == null || blankToNull(c.apiKey()) == null) throw new BusinessException(400, "请先在 AI 设置中配置 API Key"); return c;
+        if (c == null || blankToNull(c.apiKey()) == null) throw new BusinessException(400, "请先在 AI 设置中配置 API Key");
+        return new StoredConfig(endpointPolicy.normalize(c.baseUrl()), c.model(), c.apiKey());
     }
 
     private Long currentUserId() { return CurrentUserContext.get() == null ? null : CurrentUserContext.get().id(); }

@@ -170,6 +170,8 @@ docker run --name offer-tracker -p 8080:8080 \
 
 公网部署必须使用 MySQL、Redis 与 `production` profile。先在密钥管理系统中配置 `DB_URL`、`DB_USER`、`DB_PASSWORD`、`REDIS_HOST`、`REDIS_PASSWORD`、`JWT_SECRET`、`AI_CONFIG_ENCRYPTION_KEY` 和对象存储的 `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`；两个密钥至少 32 个字符，AI 加密密钥需备份并保持稳定。Redis 默认启用 TLS，可通过 `REDIS_SSL_ENABLED=false` 覆盖；ACL 用户名可用 `REDIS_USERNAME` 配置。对象存储凭据使用 AWS SDK 默认凭据链（例如注入 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或实例角色）。生产 profile 强制启用认证；若任何配置将 `AUTH_REQUIRED` / `offer-tracker.auth.required` 设为 `false`，应用会拒绝启动：
 
+生产环境中的用户 AI 服务地址必须使用 HTTPS 域名；应用拒绝 localhost 和 IP 字面量，但部署仍须在网络层禁止访问内网、链路本地地址及云元数据地址，以防用户控制的域名解析到内部网络。
+
 ```bash
 java -jar target/offer-tracker-0.1.0.jar --spring.profiles.active=mysql,production
 ```
