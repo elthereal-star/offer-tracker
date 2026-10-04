@@ -17,7 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.List;
 
 @Service
-public class OpenAiCompatibleClient {
+public class OpenAiCompatibleClient implements AiProviderHandler {
 
     private final ObjectMapper objectMapper;
     private final AiConfigService configService;
@@ -39,6 +39,10 @@ public class OpenAiCompatibleClient {
 
     public String chat(List<AiChatMessage> messages) {
         AiConfigService.StoredConfig config = configService.requireStored();
+        return request(config, messages);
+    }
+
+    private String request(AiConfigService.StoredConfig config, List<AiChatMessage> messages) {
         try {
             String endpoint = config.baseUrl().endsWith("/chat/completions")
                     ? config.baseUrl() : config.baseUrl() + "/chat/completions";
@@ -79,5 +83,10 @@ public class OpenAiCompatibleClient {
             if (httpClient == null) httpClient = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
             return httpClient;
         }
+    }
+
+    @Override
+    public String chat(AiConfigService.StoredConfig config, List<AiChatMessage> messages) {
+        return request(config, messages);
     }
 }

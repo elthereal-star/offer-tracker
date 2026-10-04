@@ -20,7 +20,7 @@ import java.util.Set;
 public class AiTaskService {
     private static final int MAX_PAYLOAD_BYTES = 4096;
     private static final Set<String> SUPPORTED_TASK_TYPES = Set.of(
-            "GENERATE_QUESTION", "EVALUATE_ANSWER", "FOLLOW_UP", "FINISH_INTERVIEW");
+            "GENERATE_QUESTION", "EVALUATE_ANSWER", "FOLLOW_UP", "FINISH_INTERVIEW", "REPAIR_TURN");
     private final AiTaskMapper tasks;
     private final ObjectMapper objectMapper;
 
@@ -80,7 +80,7 @@ public class AiTaskService {
             }
             Set<String> allowedFields = switch (taskType) {
                 case "GENERATE_QUESTION" -> Set.of("resumeId", "applicationId");
-                case "EVALUATE_ANSWER", "FOLLOW_UP" -> Set.of("sessionId", "questionId");
+                case "EVALUATE_ANSWER", "FOLLOW_UP", "REPAIR_TURN" -> Set.of("sessionId", "questionId");
                 case "FINISH_INTERVIEW" -> Set.of("sessionId");
                 default -> throw new BusinessException(400, "不支持的 AI 任务类型");
             };

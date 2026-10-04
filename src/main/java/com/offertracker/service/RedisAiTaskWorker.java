@@ -45,13 +45,17 @@ public class RedisAiTaskWorker {
     private final StringRedisTemplate redis;
     private final AiTaskMapper tasks;
     private final AiInterviewService interviews;
+    private final AiInterviewRepairService repairs;
     private final ObjectMapper objectMapper;
     private final MeterRegistry metrics;
     private final String consumer = "worker-" + UUID.randomUUID();
     private volatile boolean groupReady;
 
+    public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, AiInterviewRepairService repairs, ObjectMapper objectMapper, MeterRegistry metrics) {
+        this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.repairs = repairs; this.objectMapper = objectMapper; this.metrics = metrics;
+    }
     public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, ObjectMapper objectMapper, MeterRegistry metrics) {
-        this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.objectMapper = objectMapper; this.metrics = metrics;
+        this(redis, tasks, interviews, null, objectMapper, metrics);
     }
 
     @PostConstruct
@@ -127,6 +131,7 @@ public class RedisAiTaskWorker {
                 case "GENERATE_QUESTION" -> interviews.create(new CreateAiInterviewRequest(payload.path("resumeId").asLong(), optionalLong(payload, "applicationId")));
                 case "EVALUATE_ANSWER" -> interviews.evaluate(payload.path("sessionId").asLong(), payload.path("questionId").asLong());
                 case "FOLLOW_UP" -> interviews.followUp(payload.path("sessionId").asLong(), payload.path("questionId").asLong());
+                case "REPAIR_TURN" -> { if (repairs == null) throw new IllegalStateException("AI 修复服务未启用"); yield repairs.repair(payload.path("sessionId").asLong(), payload.path("questionId").asLong()); }
                 case "FINISH_INTERVIEW" -> interviews.finish(payload.path("sessionId").asLong());
                 default -> throw new IllegalArgumentException("unsupported AI task type: " + task.getTaskType());
             };
