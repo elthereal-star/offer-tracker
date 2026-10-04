@@ -22,6 +22,7 @@ public class RedisAiSingleFlightService implements AiDistributedSingleFlight {
         if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(lock, "1", Duration.ofSeconds(90)))) {
             metrics.counter("offer_tracker_ai_singleflight_miss_total").increment();
             try { T value = supplier.get(); redis.opsForValue().set(result, mapper.convertValue(value, String.class), Duration.ofSeconds(90)); return value; }
+            catch (RuntimeException ex) { redis.opsForValue().set(result, "__ERROR__", Duration.ofSeconds(15)); throw ex; }
             finally { redis.delete(lock); }
         }
         metrics.counter("offer_tracker_ai_singleflight_hit_total").increment();
@@ -31,6 +32,7 @@ public class RedisAiSingleFlightService implements AiDistributedSingleFlight {
             if (System.nanoTime() > deadline) throw new IllegalStateException("AI 请求协调超时，请重试");
             try { Thread.sleep(25); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new IllegalStateException("等待 AI 请求被中断", ex); }
         }
+        if ("__ERROR__".equals(value)) throw new IllegalStateException("AI 请求失败，请稍后重试");
         @SuppressWarnings("unchecked") T cast = (T) value; return cast;
     }
 }
