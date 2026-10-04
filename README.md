@@ -50,6 +50,18 @@ java -jar target/offer-tracker-0.1.0.jar
 
 `ai-interview` 分支是在基础投递看板上增加 AI 面试能力的增强版本；基础版不依赖 AI 服务，也可以独立使用公司、投递、看板、统计、日历和备份功能。
 
+### AI-Meeting 策略适配状态
+
+增强版已按 AI-Meeting 的可靠性思路适配，但保留轻量版可直接启动的特性：
+
+- AI 面试使用显式 `ACTIVE -> COMPLETED` 状态机，结束操作有会话级并发保护。
+- 相同用户、会话和问题的并发 AI 请求使用 single-flight 合并，避免重复调用和重复计费。
+- 每次回答、评分、追问和结束操作都会写入 MySQL 运行态快照；Redis 热状态丢失时，MySQL 快照可作为恢复源。
+- AI 任务继续使用 MySQL outbox + Redis Streams + lease recovery + dead-letter；系统不宣称第三方调用 exactly-once。
+- 长对话归档、Redis 多实例 single-flight、SSE 流式输出、WebSocket 语音转写和 MongoDB 归档通过适配器保留扩展边界；它们不会成为本地 H2/轻量版的强制依赖。
+
+策略适配记录见 [AI-Meeting 策略适配 ADR](docs/adr/0003-ai-meeting-strategy-adaptation.md)。
+
 ### 配置 AI 服务
 
 启动应用后，打开右上角的“AI 设置”，填写服务地址、模型名称和 API Key。服务地址必须是 OpenAI 兼容 Chat Completions 接口，例如 `https://api.deepseek.com/v1`；模型名称必须是服务商实际支持的模型。项目支持 DeepSeek、OpenAI、通义等兼容服务，费用、速率限制和数据处理规则以所选服务商为准。
@@ -293,3 +305,13 @@ MIT
 - 添加第一轮面试后，处于已收藏、已投递或历史笔试状态的记录会自动进入“面试中”；笔试作为面试类型保留，不再单独占用看板列。
 - 面试记录在关闭详情、拖拽卡片或刷新后会重新从后端加载并保持。
 - 筛选工具栏支持换行，看板按屏幕宽度自动多行排列，避免页面级横向滚动。
+
+### 多实例协调配置
+
+默认 profile 使用 JVM 内锁和 single-flight，适合本地开发及单实例轻量部署。多实例部署时启用 `redis` profile：
+
+```bash
+java -jar offer-tracker.jar --spring.profiles.active=redis
+```
+
+该 profile 使用 Redis 租约锁（30 秒自动过期，令牌校验释放）和 Redis single-flight（90 秒结果缓存与等待超时）。MySQL 仍是业务权威存储；运行态快照读取优先级为 MySQL，启用 `mongo-archive` 时才回退到 Mongo 冷归档。
