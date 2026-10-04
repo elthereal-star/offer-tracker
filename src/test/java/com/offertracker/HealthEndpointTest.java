@@ -14,7 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "management.endpoint.health.show-details=never",
         "management.endpoint.health.show-components=never",
-        "management.health.redis.enabled=false"
+        "management.health.redis.enabled=false",
+        "management.health.mongo.enabled=false"
 })
 @AutoConfigureMockMvc
 class HealthEndpointTest {

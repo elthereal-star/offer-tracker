@@ -46,6 +46,8 @@ management:
   health:
     redis:
       enabled: false
+    mongo:
+      enabled: false
 
 mybatis-plus:
   configuration:
