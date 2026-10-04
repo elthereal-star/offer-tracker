@@ -317,3 +317,5 @@ java -jar offer-tracker.jar --spring.profiles.active=redis
 该 profile 使用 Redis 租约锁（30 秒自动过期，令牌校验释放）和 Redis single-flight（90 秒结果缓存与等待超时）。MySQL 仍是业务权威存储；运行态快照读取优先级为 MySQL，启用 `mongo-archive` 时才回退到 Mongo 冷归档。
 
 实时面试事件可选启用 `realtime` profile，客户端通过 `/api/ai/interviews/{sessionId}/events` 建立 SSE 连接；事件带单调序号和 `Last-Event-ID` 游标。SSE 断线重连只用于补齐实时体验，恢复数据仍从 MySQL 快照读取。
+
+高并发基础设施还提供 Snowflake 风格 ID 生成器和可替换去重过滤器（本地 BitSet / Redis Set）。过滤器只作为重复请求的快速提示，最终唯一性仍由 MySQL 约束保证。
