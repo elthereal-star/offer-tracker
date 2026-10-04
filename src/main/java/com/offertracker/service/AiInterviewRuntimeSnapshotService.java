@@ -8,6 +8,7 @@ import com.offertracker.entity.AiInterviewSession;
 import com.offertracker.mapper.AiInterviewQuestionMapper;
 import com.offertracker.mapper.AiInterviewRuntimeSnapshotMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -21,11 +22,12 @@ public class AiInterviewRuntimeSnapshotService {
     private final AiInterviewQuestionMapper questions;
     private final ObjectMapper objectMapper;
     private final AiRuntimeArchive archive;
+    private final ObjectProvider<AiInterviewEventHub> events;
 
     public AiInterviewRuntimeSnapshotService(AiInterviewRuntimeSnapshotMapper snapshots,
                                              AiInterviewQuestionMapper questions,
-                                             ObjectMapper objectMapper, AiRuntimeArchive archive) {
-        this.snapshots = snapshots; this.questions = questions; this.objectMapper = objectMapper; this.archive = archive;
+                                             ObjectMapper objectMapper, AiRuntimeArchive archive, ObjectProvider<AiInterviewEventHub> events) {
+        this.snapshots = snapshots; this.questions = questions; this.objectMapper = objectMapper; this.archive = archive; this.events = events;
     }
 
     public void checkpoint(AiInterviewSession session) {
@@ -44,6 +46,8 @@ public class AiInterviewRuntimeSnapshotService {
             snapshot.setStateJson(objectMapper.writeValueAsString(state)); snapshot.setUpdatedAt(LocalDateTime.now());
             if (snapshot.getId() == null) snapshots.insert(snapshot); else snapshots.updateById(snapshot);
             archive.append(session.getId(), snapshot.getStateJson(), snapshot.getVersion());
+            AiInterviewEventHub hub = events.getIfAvailable();
+            if (hub != null) hub.publish(session.getId(), "snapshot", snapshot.getStateJson());
         } catch (Exception ex) {
             throw new IllegalStateException("AI 面试运行态快照保存失败", ex);
         }
