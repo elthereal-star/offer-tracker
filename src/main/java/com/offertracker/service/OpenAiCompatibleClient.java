@@ -13,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.List;
 
 @Service
@@ -48,16 +49,25 @@ public class OpenAiCompatibleClient {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload))
                     .build();
-            HttpResponse<String> response = httpClient().send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new BusinessException(502, "AI 服务请求失败（HTTP " + response.statusCode() + "）");
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    HttpResponse<String> response = httpClient().send(request, HttpResponse.BodyHandlers.ofString());
+                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                        AiChatResponse result = objectMapper.readValue(response.body(), AiChatResponse.class);
+                        if (result.choices() == null || result.choices().isEmpty() || result.choices().getFirst().message() == null) throw new AiProviderException(502, "AI 服务返回了空回答", false);
+                        return result.choices().getFirst().message().content();
+                    }
+                    boolean retryable = response.statusCode() == 408 || response.statusCode() == 409 || response.statusCode() == 429 || response.statusCode() >= 500;
+                    if (!retryable || attempt == 3) throw new AiProviderException(502, "AI 服务请求失败（HTTP " + response.statusCode() + "）", retryable);
+                } catch (AiProviderException ex) { throw ex; }
+                catch (java.io.IOException | InterruptedException ex) {
+                    if (ex instanceof InterruptedException) Thread.currentThread().interrupt();
+                    if (attempt == 3) throw new AiProviderException(502, "AI 服务连接失败，请检查地址和网络", true);
+                }
+                try { Thread.sleep((1L << attempt) * 100L + ThreadLocalRandom.current().nextLong(100)); }
+                catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new AiProviderException(502, "AI 请求重试被中断", true); }
             }
-            AiChatResponse result = objectMapper.readValue(response.body(), AiChatResponse.class);
-            if (result.choices() == null || result.choices().isEmpty()
-                    || result.choices().getFirst().message() == null) {
-                throw new BusinessException(502, "AI 服务返回了空回答");
-            }
-            return result.choices().getFirst().message().content();
+            throw new AiProviderException(502, "AI 服务请求失败，请稍后重试", true);
         } catch (BusinessException ex) { throw ex; }
         catch (Exception ex) { throw new BusinessException(502, "AI 服务连接失败，请检查地址和网络"); }
     }

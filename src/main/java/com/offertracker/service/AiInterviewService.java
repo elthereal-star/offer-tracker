@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 @Service
 public class AiInterviewService {
- private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock;
- public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;}
+ private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock; private final AiInterviewIdempotencyService idempotency;
+ public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock,AiInterviewIdempotencyService idempotency){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;this.idempotency=idempotency;}
  @Transactional public AiInterviewSessionResponse create(CreateAiInterviewRequest req){
   Resume resume=resumes.getOrThrow(req.resumeId()); JobApplication application=req.applicationId()==null?null:applications.getOrThrow(req.applicationId());
   String context=resume.getExtractedText(); if(context.length()>12000) context=context.substring(0,12000);
@@ -35,6 +35,14 @@ public class AiInterviewService {
   return sessions.selectList(wrapper).stream().map(s->get(s.getId())).toList();
  }
  @Transactional public AiInterviewSessionResponse answer(Long sessionId, Long questionId, SubmitAiInterviewAnswerRequest req){
+  return answer(sessionId, questionId, null, req);
+ }
+ @Transactional public AiInterviewSessionResponse answer(Long sessionId, Long questionId, String requestKey, SubmitAiInterviewAnswerRequest req){
+  Long owner = CurrentUserContext.get()==null?null:CurrentUserContext.get().id();
+  if (owner != null && requestKey != null && !requestKey.isBlank()) return idempotency.execute(owner, sessionId, questionId, "ANSWER", requestKey, AiInterviewSessionResponse.class, () -> answerInternal(sessionId, questionId, req));
+  return answerInternal(sessionId, questionId, req);
+ }
+ private AiInterviewSessionResponse answerInternal(Long sessionId, Long questionId, SubmitAiInterviewAnswerRequest req){
   AiInterviewSession session=lockSessionOrThrow(sessionId); ensureActive(session);
   AiInterviewQuestion question=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
   if(question==null) throw new BusinessException(404,"AI 面试题目不存在: "+questionId);
