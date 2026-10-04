@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,6 +52,7 @@ public class RedisAiTaskWorker {
     private final String consumer = "worker-" + UUID.randomUUID();
     private volatile boolean groupReady;
 
+    @Autowired
     public RedisAiTaskWorker(StringRedisTemplate redis, AiTaskMapper tasks, AiInterviewService interviews, AiInterviewRepairService repairs, ObjectMapper objectMapper, MeterRegistry metrics) {
         this.redis = redis; this.tasks = tasks; this.interviews = interviews; this.repairs = repairs; this.objectMapper = objectMapper; this.metrics = metrics;
     }
