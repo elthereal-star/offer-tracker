@@ -31,7 +31,7 @@ The migration order is:
 | EnumMap state machine | AI session lifecycle transitions;投递状态 remains user-adjustable | enabled |
 | Duplicate-submit lock | Session/question/finalize keys | Redis production, local lock fallback |
 | Hot/cold runtime snapshots | AI question/answer progress rehydration | production phase |
-| SSE/WebSocket | streaming AI output and optional speech transcription | opt-in feature |
+| SSE/WebSocket | streaming AI output and optional text/transcript input | `realtime` profile |
 | Message sequence allocator | per-session AI event ordering | streaming phase |
 | Repair/retry/dead letter | existing AI task outbox and worker recovery | already present, to be extended |
 | Provider handler factory | OpenAI-compatible adapter plus future providers | incremental |
