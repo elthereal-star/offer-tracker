@@ -22,6 +22,7 @@ public interface JobApplicationMapper extends BaseMapper<JobApplication> {
             FROM job_applications a
             JOIN companies c ON c.id = a.company_id
             WHERE 1 = 1
+            <if test="ownerId != null">AND a.owner_id = #{ownerId}</if>
             <if test="status != null">AND a.status = #{status}</if>
             <if test="companyId != null">AND a.company_id = #{companyId}</if>
             <if test="keyword != null and keyword != ''">
@@ -40,6 +41,7 @@ public interface JobApplicationMapper extends BaseMapper<JobApplication> {
     Page<JobApplication> selectFilteredPage(
             Page<JobApplication> page,
             @Param("status") ApplicationStatus status,
+            @Param("ownerId") Long ownerId,
             @Param("companyId") Long companyId,
             @Param("keyword") String keyword,
             @Param("city") String city,

@@ -1,0 +1,65 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD}
+      timeout: 2s
+      connect-timeout: 2s
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:true}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis
+        liveness:
+          include: livenessState
+  health:
+    redis:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+offer-tracker:
+  security:
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
+  ai:
+    connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
+    request-timeout: ${AI_REQUEST_TIMEOUT:90s}
+    task-poll-delay: ${AI_TASK_POLL_DELAY:1000}
+    task-dispatch-retry-delay: ${AI_TASK_DISPATCH_RETRY_DELAY:1m}
+  auth:
+    required: ${AUTH_REQUIRED:true}
+    config-encryption-key: ${AI_CONFIG_ENCRYPTION_KEY}
+  storage:
+    type: ${RESUME_STORAGE_TYPE:s3}
+    s3:
+      endpoint: ${S3_ENDPOINT}
+      region: ${S3_REGION}
+      bucket: ${S3_BUCKET}
+      prefix: ${S3_PREFIX:offer-tracker/resumes}
+      path-style-access: ${S3_PATH_STYLE_ACCESS:true}

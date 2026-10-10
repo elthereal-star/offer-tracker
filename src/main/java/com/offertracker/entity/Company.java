@@ -11,6 +11,7 @@ public class Company {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    private Long ownerId;
     private String name;
     private String website;
     private String notes;
@@ -23,6 +24,8 @@ public class Company {
     public void setId(Long id) {
         this.id = id;
     }
+    public Long getOwnerId() { return ownerId; }
+    public void setOwnerId(Long ownerId) { this.ownerId = ownerId; }
 
     public String getName() {
         return name;

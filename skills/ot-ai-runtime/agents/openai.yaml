@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker AI 运行时设施"
+  short_description: "解释 single-flight、会话锁、fencing 令牌与 AI 限流的生效条件。"
+  default_prompt: "使用 $ot-ai-runtime 帮我确认重复 AI 调用怎么折叠、锁与 fencing 令牌怎么配合、哪些限制只在生产 profile 生效。"
+
+policy:
+  allow_implicit_invocation: true

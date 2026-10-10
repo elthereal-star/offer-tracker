@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker AI 面试领域"
+  short_description: "处理面试五阶段链路、状态迁移与追问裁决规则。"
+  default_prompt: "使用 $ot-ai-interview-domain 帮我分析或修改 AI 面试的流程、状态流转或守卫条件。"
+
+policy:
+  allow_implicit_invocation: true

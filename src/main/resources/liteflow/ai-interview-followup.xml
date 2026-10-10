@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flow>
+    <!--
+      AI 面试追问裁决链。
+      节点顺序即守卫顺序，与原 followUp() 中的判定顺序一一对应：
+        终态拦截 -> 加载上下文 -> 非最新题短路 -> 评分前置校验 -> 生成裁决结果
+      规则的判定结果写入 AiFollowUpContext，由 AiInterviewService 翻译成对外的
+      HTTP 语义（404 / 409 / 短路返回 / 继续出题）。
+    -->
+    <chain name="aiInterviewFollowUpChain">
+        THEN(requireActiveGuard, loadFollowUpContext, requireLatestQuestionGuard, requireEvaluationGuard, followUpDecisionFinalize);
+    </chain>
+</flow>
