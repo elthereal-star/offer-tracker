@@ -11,16 +11,22 @@ import com.offertracker.enums.AiInterviewStatus;
 import com.offertracker.service.rule.AiFollowUpContext;
 import com.yomahub.liteflow.core.FlowExecutor;
 import com.yomahub.liteflow.flow.LiteflowResponse;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDateTime;
 import java.util.List;
 @Service
 public class AiInterviewService {
  /** 追问裁决链的链名，与 liteflow/ai-interview-followup.xml 中的定义一致。 */
  private static final String FOLLOW_UP_CHAIN = "aiInterviewFollowUpChain";
- private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock; private final AiInterviewIdempotencyService idempotency; private final FlowExecutor flowExecutor;
- public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock,AiInterviewIdempotencyService idempotency,FlowExecutor flowExecutor){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;this.idempotency=idempotency;this.flowExecutor=flowExecutor;}
+ private static final Logger log = LoggerFactory.getLogger(AiInterviewService.class);
+ private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock; private final AiInterviewIdempotencyService idempotency; private final FlowExecutor flowExecutor; private final TransactionTemplate transactions; private final Counter fenceRejections;
+ public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock,AiInterviewIdempotencyService idempotency,FlowExecutor flowExecutor,TransactionTemplate transactions,MeterRegistry metrics){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;this.idempotency=idempotency;this.flowExecutor=flowExecutor;this.transactions=transactions;this.fenceRejections=metrics.counter("offer_tracker_ai_fence_rejected_total");}
  @Transactional public AiInterviewSessionResponse create(CreateAiInterviewRequest req){
   Resume resume=resumes.getOrThrow(req.resumeId()); JobApplication application=req.applicationId()==null?null:applications.getOrThrow(req.applicationId());
   String context=resume.getExtractedText(); if(context.length()>12000) context=context.substring(0,12000);
@@ -53,23 +59,50 @@ public class AiInterviewService {
   if(question==null) throw new BusinessException(404,"AI 面试题目不存在: "+questionId);
   question.setAnswer(req.answer().trim()); questions.updateById(question); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); snapshots.checkpoint(session); return get(sessionId);
  }
- @Transactional public AiInterviewSessionResponse finish(Long sessionId){
-  return operationLock.executeFenced(sessionId, fenceToken -> {
-  AiInterviewSession session=lockSessionOrThrow(sessionId);
-  if("COMPLETED".equals(session.getStatus())) return get(sessionId);
+ public AiInterviewSessionResponse finish(Long sessionId){
+  FinishPlan plan=transactions.execute(status -> planFinish(sessionId));
+  if(plan.alreadyCompleted()!=null) return plan.alreadyCompleted();
+  checkAiRequestAllowed();
+  String report=singleFlight.execute("finish:"+ownerKey()+":"+sessionId, () -> ai.chat(List.of(new AiChatMessage("system","你是一名专业的求职面试教练。"),new AiChatMessage("user",plan.prompt())))).trim();
+  return operationLock.executeFenced(sessionId, fenceToken -> transactions.execute(status -> commitFinish(sessionId, plan.average(), report, fenceToken)));
+ }
+ private FinishPlan planFinish(Long sessionId){
+  AiInterviewSession session=loadSessionOrThrow(sessionId);
+  if("COMPLETED".equals(session.getStatus())) return new FinishPlan(0,null,get(sessionId));
   List<AiInterviewQuestion> scored=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,sessionId).isNotNull(AiInterviewQuestion::getScore));
   if(scored.isEmpty()) throw new BusinessException(409,"请至少完成一道题目的 AI 评分");
   int average=(int)Math.round(scored.stream().mapToInt(AiInterviewQuestion::getScore).average().orElse(0));
   String prompt="请根据以下面试评分和反馈生成一段简洁的中文总结，包含优势、待提升方向和下一步建议，不要使用 JSON。平均分："+average+"。反馈：\n"+scored.stream().map(AiInterviewQuestion::getFeedback).reduce((a,b)->a+"\n"+b).orElse("");
-  checkAiRequestAllowed();
-  String report=singleFlight.execute("finish:"+ownerKey()+":"+sessionId, () -> ai.chat(List.of(new AiChatMessage("system","你是一名专业的求职面试教练。"),new AiChatMessage("user",prompt)))).trim();
+  return new FinishPlan(average,prompt,null);
+ }
+ private AiInterviewSessionResponse commitFinish(Long sessionId,int average,String report,long fenceToken){
+  AiInterviewSession session=loadSessionOrThrow(sessionId);
+  if("COMPLETED".equals(session.getStatus())) return get(sessionId);
   stateMachine.requireTransition(session.getStatus(), AiInterviewStatus.COMPLETED);
   LocalDateTime finishedAt=LocalDateTime.now();
   int fenced=sessions.completeWithFence(sessionId, AiInterviewStatus.COMPLETED.name(), average, report, finishedAt, fenceToken);
-  if(fenced==0) throw new BusinessException(409,"会话已被更晚的操作接管，本次收尾写入已丢弃");
+  if(fenced==0) return resolveFenceRejection(sessionId, fenceToken);
   session.setAverageScore(average); session.setReport(report); session.setStatus(AiInterviewStatus.COMPLETED.name()); session.setUpdatedAt(finishedAt); snapshots.checkpoint(session); return get(sessionId);
-  });
  }
+ /**
+  * fencing 条件写入被拒后的收口。
+  *
+  * <p>{@code fence_token} 只可能由本类的收尾写入推进，且每次推进都伴随 status=COMPLETED，
+  * 所以「写入被拒」在实际语义上等价于「已经有人把这次收尾做完了」。此时调用方的目标已经达成，
+  * 按幂等返回当前会话；只有在会话仍未收尾时才说明是真的被更晚的持有者抢了先，报 409。</p>
+  *
+  * <p>包级可见是为了让测试能直接覆盖这条分支：它只在真实并发竞争下才会被触发，
+  * 无法通过公开 API 稳定构造。</p>
+  */
+ AiInterviewSessionResponse resolveFenceRejection(Long sessionId,long fenceToken){
+  Long stored=sessions.selectFenceToken(sessionId);
+  log.warn("AI 面试收尾写入被 fencing 令牌拒绝: sessionId={} token={} storedToken={}", sessionId, fenceToken, stored);
+  fenceRejections.increment();
+  AiInterviewSession current=sessions.selectById(sessionId);
+  if(current!=null && "COMPLETED".equals(current.getStatus())) return get(sessionId);
+  throw new BusinessException(409,"会话已被更晚的操作接管，本次收尾写入已丢弃");
+ }
+ private record FinishPlan(int average,String prompt,AiInterviewSessionResponse alreadyCompleted){}
  @Transactional public AiInterviewSessionResponse evaluate(Long sessionId, Long questionId){
   AiInterviewSession session=lockSessionOrThrow(sessionId); ensureActive(session);
   AiInterviewQuestion question=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
@@ -106,6 +139,17 @@ public class AiInterviewService {
   Long ownerId=CurrentUserContext.get()==null?null:CurrentUserContext.get().id();
   if(sessions.selectIdForUpdate(id, ownerId)==null) throw new BusinessException(404,"AI 面试会话不存在: "+id);
   return sessions.selectById(id);
+ }
+ /**
+  * 只读取会话并校验归属（不校验状态、不加行锁）。
+  *
+  * <p>收尾流程的校验阶段与临界区阶段都用它：校验阶段本来就不该持锁，而临界区里的排他性
+  * 由外层会话锁 + 存储层 fencing 条件写入共同保证，不需要再叠一层行锁去锁住一整段 AI 调用。</p>
+  */
+ private AiInterviewSession loadSessionOrThrow(Long id){
+  AiInterviewSession session=sessions.selectById(id);
+  if(session==null || !ownedByCurrentUser(session)) throw new BusinessException(404,"AI 面试会话不存在: "+id);
+  return session;
  }
  private boolean ownedByCurrentUser(AiInterviewSession session){
   return CurrentUserContext.get()==null || CurrentUserContext.get().id().equals(session.getOwnerId());

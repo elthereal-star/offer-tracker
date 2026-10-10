@@ -20,7 +20,6 @@ import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,9 +51,18 @@ class AiSessionFenceTest {
 
         assertTrue(second > first, "同一会话的令牌必须严格递增");
         assertTrue(third > second, "同一会话的令牌必须严格递增");
-        assertTrue(fence.isCurrent(sessionId, third));
-        assertFalse(fence.isCurrent(sessionId, first), "被取代的令牌不应再被认为是最新");
-        assertFalse(fence.isCurrent(sessionId, 0L), "0 表示未参与防护");
+        assertEquals(0L, fence.issue(null), "sessionId 为空时返回 0，表示不参与防护");
+    }
+
+    @Test
+    void issuesTokenAboveTheValueAlreadyStoredInDatabase() {
+        AiInterviewSession session = newSession();
+        // 模拟“上一个进程写过令牌、本进程计数器还是空的”这一场景。
+        assertEquals(1, sessions.completeWithFence(session.getId(), "COMPLETED", 80, "上一进程写的报告", LocalDateTime.now(), 5L));
+
+        long token = fence.issue(session.getId());
+
+        assertEquals(6L, token, "发号必须大于库中已记录值，否则条件写入恒不成立、会话永久无法收尾");
     }
 
     @Test

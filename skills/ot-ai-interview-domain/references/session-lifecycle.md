@@ -1,6 +1,6 @@
 # 会话生命周期
 
-全部入口在 `AiInterviewService`，全部方法都带 `@Transactional`。
+全部入口在 `AiInterviewService`。除 `finish` 外都带 `@Transactional`；`finish` 的**事务边界由方法内部的 `TransactionTemplate` 分两段控制**，原因见下方「收尾为什么被拆成三段」。
 
 ## 五个阶段
 
@@ -10,7 +10,7 @@
 | 作答 | `answer` | **否** | 是 | 无 | 写入 answer、更新会话、快照 |
 | 评分 | `evaluate` | 是 | 是 | 无 | 写入 score / feedback、快照 |
 | 追问 | `followUp` | 是 | 是 | 无 | 插入下一题、更新会话、快照 |
-| 收尾 | `finish` | 是（生成报告） | 是 | **是** | 写入平均分 + 报告 + 终态、快照 |
+| 收尾 | `finish` | 是（生成报告） | **无**（改用只读校验） | **是**（但只覆盖毫秒级临界区） | 写入平均分 + 报告 + 终态、快照 |
 
 「行锁」指 `AiInterviewSessionMapper.selectIdForUpdate`（`SELECT ... FOR UPDATE`），它同时承担**存在性校验**与**归属校验**：
 
@@ -77,7 +77,40 @@ if (previous.getQuestionNo() < latestQuestionNo) context.skip();
 
 ```java
 int fenced = sessions.completeWithFence(sessionId, COMPLETED, average, report, finishedAt, fenceToken);
-if (fenced == 0) throw new BusinessException(409, "会话已被更晚的操作接管，本次收尾写入已丢弃");
+if (fenced == 0) return resolveFenceRejection(sessionId, fenceToken);
 ```
 
 令牌由 `AiSessionLock.executeFenced` 在**拿到锁之后**发号。目的是覆盖"锁租约已过期、原持有者仍在跑"的窗口 —— 详情见 `ot-ai-runtime`。
+
+## 收尾为什么被拆成三段
+
+`finish` 是唯一要「读状态 → 判断 → 调 AI → 写终态」的入口，而那次 AI 调用最坏 90 秒、锁租约只有 30 秒。把 AI 调用留在锁与事务里，会同时踩三个坑：租约过期导致旧持有者回写、HikariCP 连接被占满、行锁持有 90 秒（超过 MySQL 默认的 50 秒锁等待）把同会话的 `answer`/`evaluate` 顶到超时。
+
+所以它被拆成三段，**只有第一、三段在事务里**：
+
+| 段 | 做什么 | 是否持锁 | 是否在事务里 | 耗时 |
+|---|---|---|---|---|
+| ① `planFinish` | 校验存在性/归属、必须 `ACTIVE`、至少一道已评分、算平均分、拼提示词 | 否 | 是（短） | 毫秒 |
+| ② | `checkAiRequestAllowed()` + 调 AI 生成报告 | 否 | **否** | 最长 90 秒 |
+| ③ `commitFinish` | 取会话锁 → 发 fencing 令牌 → 条件写入 + 快照 | 是（短） | 是（短） | 毫秒 |
+
+```java
+public AiInterviewSessionResponse finish(Long sessionId) {
+    FinishPlan plan = transactions.execute(status -> planFinish(sessionId));
+    if (plan.alreadyCompleted() != null) return plan.alreadyCompleted();
+    checkAiRequestAllowed();
+    String report = singleFlight.execute("finish:" + ownerKey() + ":" + sessionId, () -> ai.chat(...)).trim();
+    return operationLock.executeFenced(sessionId,
+            fenceToken -> transactions.execute(status -> commitFinish(sessionId, plan.average(), report, fenceToken)));
+}
+```
+
+几个关键点：
+
+- **`finish` 上没有 `@Transactional`。** `AiInterviewFinalizeTest.finishDoesNotRunInsideASingleTransaction` 用反射断言这一点，防止后来人顺手加回去。
+- **第一段用只读的 `loadSessionOrThrow`，不再用 `lockSessionOrThrow`。** 校验阶段本来就不该持行锁。
+- **第二段不持锁也能保证只调一次 AI。** 因为 single-flight 的 key 是 `finish:{ownerKey}:{sessionId}`，两个并发收尾会被折叠成同一次调用、拿到同一份报告。所以"必须持锁跨过 AI 调用"这个前提本来就不成立。
+- **第三段重新读一次会话状态**（`commitFinish` 里的第一个判断），因为第一段到第三段之间状态可能已经变了。已 `COMPLETED` 就直接幂等返回。
+- ②③ 之间隔了几十秒，但**第 ① 段算出的 prompt 会被一直带着**，所以重算不会发生。
+
+被 fencing 拒绝时的收口语义（幂等返回还是 409）见 `ot-ai-runtime` 的 `locking-and-fencing.md`。

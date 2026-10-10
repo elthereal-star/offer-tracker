@@ -50,8 +50,10 @@
 | `V17` | 运行态快照表（含单调递增 `version`） |
 | `V18` | 请求幂等表 |
 | `V19` | 会话级 fencing token 列 |
+| `V20` | 题目编号在会话内唯一（`uk_ai_interview_questions_no`），建约束前先清理历史重复行 |
 
 ## 容易混淆的两处
 
 - `InterviewService` 与 `AiInterviewService` 不是一件事：前者是**人工记录**面试结果（`InterviewType` / `InterviewResult`），后者是 **AI 驱动的模拟面试**（`AiInterviewStatus`）。改功能时先确认改的是哪一个。
 - `AiRuntimeArchive` 有 `Noop` 与 `Mongo` 两个实现，默认 profile 下是 `Noop`。**不要假设归档一定在写。**
+- `AiInterviewService` 里**只有 `finish` 不带 `@Transactional`**，它的两段事务由方法内部的 `TransactionTemplate` 控制（为了让 90 秒的 AI 调用留在事务外）。给别的方法加 `@Transactional` 是安全的，但**不要给 `finish` 加回去** —— 有一个反射断言在守这条线。
