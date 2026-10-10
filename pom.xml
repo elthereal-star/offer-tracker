@@ -22,6 +22,7 @@
         <node.version>v22.14.0</node.version>
         <npm.version>10.9.2</npm.version>
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+        <liteflow.version>2.15.3.2</liteflow.version>
         <skip.frontend>false</skip.frontend>
     </properties>
 
@@ -108,6 +109,11 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>3.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yomahub</groupId>
+            <artifactId>liteflow-spring-boot-starter</artifactId>
+            <version>${liteflow.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

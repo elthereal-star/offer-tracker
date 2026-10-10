@@ -8,14 +8,19 @@ import com.offertracker.dto.*;
 import com.offertracker.entity.*;
 import com.offertracker.mapper.*;
 import com.offertracker.enums.AiInterviewStatus;
+import com.offertracker.service.rule.AiFollowUpContext;
+import com.yomahub.liteflow.core.FlowExecutor;
+import com.yomahub.liteflow.flow.LiteflowResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 @Service
 public class AiInterviewService {
- private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock; private final AiInterviewIdempotencyService idempotency;
- public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock,AiInterviewIdempotencyService idempotency){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;this.idempotency=idempotency;}
+ /** 追问裁决链的链名，与 liteflow/ai-interview-followup.xml 中的定义一致。 */
+ private static final String FOLLOW_UP_CHAIN = "aiInterviewFollowUpChain";
+ private final AiInterviewSessionMapper sessions; private final AiInterviewQuestionMapper questions; private final ResumeService resumes; private final JobApplicationService applications; private final CompanyService companies; private final OpenAiCompatibleClient ai; private final AiRequestLimiter aiRequestLimiter; private final ObjectMapper objectMapper; private final AiDistributedSingleFlight singleFlight; private final AiInterviewStateMachine stateMachine; private final AiInterviewRuntimeSnapshotService snapshots; private final AiSessionLock operationLock; private final AiInterviewIdempotencyService idempotency; private final FlowExecutor flowExecutor;
+ public AiInterviewService(AiInterviewSessionMapper s,AiInterviewQuestionMapper q,ResumeService r,JobApplicationService a,CompanyService c,OpenAiCompatibleClient ai,AiRequestLimiter aiRequestLimiter,ObjectMapper objectMapper,AiDistributedSingleFlight singleFlight,AiInterviewStateMachine stateMachine,AiInterviewRuntimeSnapshotService snapshots,AiSessionLock operationLock,AiInterviewIdempotencyService idempotency,FlowExecutor flowExecutor){sessions=s;questions=q;resumes=r;applications=a;companies=c;this.ai=ai;this.aiRequestLimiter=aiRequestLimiter;this.objectMapper=objectMapper;this.singleFlight=singleFlight;this.stateMachine=stateMachine;this.snapshots=snapshots;this.operationLock=operationLock;this.idempotency=idempotency;this.flowExecutor=flowExecutor;}
  @Transactional public AiInterviewSessionResponse create(CreateAiInterviewRequest req){
   Resume resume=resumes.getOrThrow(req.resumeId()); JobApplication application=req.applicationId()==null?null:applications.getOrThrow(req.applicationId());
   String context=resume.getExtractedText(); if(context.length()>12000) context=context.substring(0,12000);
@@ -77,14 +82,22 @@ public class AiInterviewService {
   catch(Exception ex){ throw new BusinessException(502,"AI 评分返回格式无效，请重试"); }
  }
  @Transactional public AiInterviewSessionResponse followUp(Long sessionId, Long questionId){
-  AiInterviewSession session=lockSessionOrThrow(sessionId); ensureActive(session);
-  AiInterviewQuestion previous=questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getId,questionId).eq(AiInterviewQuestion::getSessionId,sessionId));
-  if(previous==null) throw new BusinessException(404,"AI 面试题目不存在: "+questionId);
-  Integer latestNo=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,sessionId)).stream().map(AiInterviewQuestion::getQuestionNo).max(Integer::compareTo).orElse(0);
-  if(previous.getQuestionNo()<latestNo) return get(sessionId);
-  if(previous.getScore()==null || previous.getFeedback()==null) throw new BusinessException(409,"请先完成当前题目的 AI 评分");
-  Integer nextNo=latestNo+1;
-  String prompt="请根据上一道面试题、候选人回答和评分反馈，生成下一道有针对性的追问。只返回题目本身，不要编号、不要解释。上一题：\n"+previous.getContent()+"\n回答：\n"+previous.getAnswer()+"\n评分反馈：\n"+previous.getFeedback();
+  AiInterviewSession session=lockSessionOrThrow(sessionId);
+  AiFollowUpContext context=new AiFollowUpContext(sessionId, questionId, session);
+  LiteflowResponse decision=flowExecutor.execute2Resp(FOLLOW_UP_CHAIN, null, context);
+  if(!decision.isSuccess()){
+   Exception cause=decision.getCause();
+   if(cause instanceof BusinessException business) throw business;
+   throw new BusinessException(500,"追问裁决链执行失败: "+(cause==null?decision.getMessage():cause.getMessage()));
+  }
+  switch(context.getOutcome()){
+   case REJECTED -> throw new BusinessException(context.getRejectionCode(), context.getRejectionMessage());
+   case SKIPPED -> { return get(sessionId); }
+   case READY -> { }
+   default -> throw new BusinessException(500,"追问裁决链未给出结论");
+  }
+  Integer nextNo=context.getNextQuestionNo();
+  String prompt=context.getPrompt();
   checkAiRequestAllowed();
   String content=singleFlight.execute("follow-up:"+ownerKey()+":"+sessionId+":"+questionId, () -> ai.chat(List.of(new AiChatMessage("system","你负责设计循序渐进、友好的技术面试追问。"),new AiChatMessage("user",prompt))));
   AiInterviewQuestion next=new AiInterviewQuestion(); next.setSessionId(sessionId); next.setQuestionNo(nextNo); next.setContent(content.trim()); next.setCreatedAt(LocalDateTime.now()); questions.insert(next); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); snapshots.checkpoint(session); return get(sessionId);

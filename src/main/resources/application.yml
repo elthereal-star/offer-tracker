@@ -61,6 +61,12 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+liteflow:
+  # 追问裁决链的规则文件；节点类由 com.offertracker 包扫描发现
+  rule-source: classpath:liteflow/ai-interview-followup.xml
+  print-banner: false
+  print-execution-log: false
+
 offer-tracker:
   ai:
     connect-timeout: ${AI_CONNECT_TIMEOUT:10s}

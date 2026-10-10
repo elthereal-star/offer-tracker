@@ -8,3 +8,10 @@ spring:
 offer-tracker:
   auth:
     config-encryption-key: test-only-ai-config-encryption-key-at-least-32-chars
+
+liteflow:
+  # 测试 classpath 下 test/resources 的 application.yml 会整体覆盖主配置，
+  # 因此规则源必须在这里再声明一次，否则 LiteFlow 启动时找不到链定义。
+  rule-source: classpath:liteflow/ai-interview-followup.xml
+  print-banner: false
+  print-execution-log: false
