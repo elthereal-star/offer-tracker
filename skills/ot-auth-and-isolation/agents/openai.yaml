@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker 身份与隔离"
+  short_description: "说明身份来源、资源归属校验与按用户隔离的落地方式。"
+  default_prompt: "使用 $ot-auth-and-isolation 帮我确认当前用户身份从哪来、资源归属怎么校验、重复提交怎么防。"
+
+policy:
+  allow_implicit_invocation: true

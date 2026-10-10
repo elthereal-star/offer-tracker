@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker 实时通道"
+  short_description: "说明 SSE 事件推送、断线续传与转写帧去重的契约。"
+  default_prompt: "使用 $ot-realtime-transport 帮我分析会话事件为什么丢、重连后怎么续、转写帧怎么去重。"
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker 异步任务"
+  short_description: "说明 AI 任务的提交校验、状态机、投递与执行链路。"
+  default_prompt: "使用 $ot-async-tasks 帮我分析 AI 任务为什么卡住、重试与死信是怎么触发的。"
+
+policy:
+  allow_implicit_invocation: true

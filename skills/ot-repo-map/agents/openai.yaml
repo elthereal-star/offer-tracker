@@ -1,0 +1,7 @@
+interface:
+  display_name: "Offer Tracker 仓库地图"
+  short_description: "定位模块边界、profile 运行画像与配置真相源。"
+  default_prompt: "使用 $ot-repo-map 帮我确认这段逻辑属于哪个模块、当前 profile 启用的是哪套实现。"
+
+policy:
+  allow_implicit_invocation: true
