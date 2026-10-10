@@ -49,7 +49,7 @@ public class AiInterviewService {
   question.setAnswer(req.answer().trim()); questions.updateById(question); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); snapshots.checkpoint(session); return get(sessionId);
  }
  @Transactional public AiInterviewSessionResponse finish(Long sessionId){
-  return operationLock.execute(sessionId, () -> {
+  return operationLock.executeFenced(sessionId, fenceToken -> {
   AiInterviewSession session=lockSessionOrThrow(sessionId);
   if("COMPLETED".equals(session.getStatus())) return get(sessionId);
   List<AiInterviewQuestion> scored=questions.selectList(new LambdaQueryWrapper<AiInterviewQuestion>().eq(AiInterviewQuestion::getSessionId,sessionId).isNotNull(AiInterviewQuestion::getScore));
@@ -58,7 +58,11 @@ public class AiInterviewService {
   String prompt="请根据以下面试评分和反馈生成一段简洁的中文总结，包含优势、待提升方向和下一步建议，不要使用 JSON。平均分："+average+"。反馈：\n"+scored.stream().map(AiInterviewQuestion::getFeedback).reduce((a,b)->a+"\n"+b).orElse("");
   checkAiRequestAllowed();
   String report=singleFlight.execute("finish:"+ownerKey()+":"+sessionId, () -> ai.chat(List.of(new AiChatMessage("system","你是一名专业的求职面试教练。"),new AiChatMessage("user",prompt)))).trim();
-  stateMachine.requireTransition(session.getStatus(), AiInterviewStatus.COMPLETED); session.setAverageScore(average); session.setReport(report); session.setStatus(AiInterviewStatus.COMPLETED.name()); session.setUpdatedAt(LocalDateTime.now()); sessions.updateById(session); snapshots.checkpoint(session); return get(sessionId);
+  stateMachine.requireTransition(session.getStatus(), AiInterviewStatus.COMPLETED);
+  LocalDateTime finishedAt=LocalDateTime.now();
+  int fenced=sessions.completeWithFence(sessionId, AiInterviewStatus.COMPLETED.name(), average, report, finishedAt, fenceToken);
+  if(fenced==0) throw new BusinessException(409,"会话已被更晚的操作接管，本次收尾写入已丢弃");
+  session.setAverageScore(average); session.setReport(report); session.setStatus(AiInterviewStatus.COMPLETED.name()); session.setUpdatedAt(finishedAt); snapshots.checkpoint(session); return get(sessionId);
   });
  }
  @Transactional public AiInterviewSessionResponse evaluate(Long sessionId, Long questionId){
