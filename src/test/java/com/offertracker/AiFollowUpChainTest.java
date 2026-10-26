@@ -1,5 +1,6 @@
 package com.offertracker;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offertracker.entity.AiInterviewQuestion;
 import com.offertracker.entity.AiInterviewSession;
 import com.offertracker.mapper.AiInterviewQuestionMapper;
@@ -169,6 +170,12 @@ class AiFollowUpChainTest {
         question.setContent("第 " + questionNo + " 题");
         question.setCreatedAt(LocalDateTime.now());
         questions.insert(question);
-        return question;
+        // 重新查一次，确保拿到数据库真正生成的 id：
+        // 依赖 insert 回填在部分 JDK/H2 组合上不稳定，会让断言拿到 null id 而误报 404。
+        AiInterviewQuestion persisted = questions.selectOne(new LambdaQueryWrapper<AiInterviewQuestion>()
+                .eq(AiInterviewQuestion::getSessionId, sessionId)
+                .eq(AiInterviewQuestion::getQuestionNo, questionNo));
+        assertNotNull(persisted, "题目插入后必须能读回");
+        return persisted;
     }
 }
