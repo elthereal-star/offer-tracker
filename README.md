@@ -48,19 +48,20 @@ java -jar target/offer-tracker-0.1.0.jar
 
 ## AI 面试增强版
 
-`ai-interview` 分支是在基础投递看板上增加 AI 面试能力的增强版本；基础版不依赖 AI 服务，也可以独立使用公司、投递、看板、统计、日历和备份功能。
+AI 面试能力已经并入主干（原 `ai-interview` 分支）。基础版不依赖 AI 服务，公司、投递、看板、统计和备份功能可以独立使用。
 
-### AI-Meeting 策略适配状态
+### 可靠性设计
 
-增强版已按 AI-Meeting 的可靠性思路适配，但保留轻量版可直接启动的特性：
+- **主链路**：出题、作答、评分、追问、报告五个环节；`EnumMap` 显式状态机只允许 `ACTIVE -> COMPLETED`，非法迁移直接返回 409。
+- **追问裁决**：终态拦截、上下文加载、非最新题短路、评分前置校验和出题裁决已拆成 LiteFlow 规则链（`liteflow/ai-interview-followup.xml`），节点顺序与接口语义一一对应，调整判定顺序只改规则、不改 Java。
+- **三段式收尾**：结束面试时先做预检，模型调用放在事务与会话锁之外，再进入毫秒级临界区落库，避免 90 秒的调用一直占着数据库连接和行锁。
+- **Fencing Token**：JVM / Redis 两个发号器为每次收尾分配严格递增的令牌（Redis 版在 Lua 里与库中值取最大值再 +1，不受进程内计数丢失影响），写入走 `WHERE fence_token = ?` 条件更新；被后续请求超越的旧结果会直接拒绝，不会覆盖新状态。
+- **三层幂等**：single-flight 合并同一请求、`X-Idempotency-Key` 唯一约束、`DuplicateKeyException` 回查兜底。
+- **运行态恢复**：MySQL 快照是权威源（version 由数据库原子 `+1`，不会回退），MongoDB 只作为冷归档、在权威快照缺失时回落；恢复按字段增量补齐，已有字段不覆盖；Redis 热态写回带 Lua 版本 CAS。
+- **实时事件**：SSE 按会话缓冲最近 256 条事件，重连带 `Last-Event-ID` 时按游标补发并保持序号递增；WebSocket 通道按 `sequence` 丢弃重复与乱序消息。事件通道是建议性的，故障不影响主链路一致性。
+- **异步任务**：事务性 Outbox 与业务数据同事务落库，`dispatch_status` 做 CAS 抢占，Redis Streams 消费组消费并 ACK，租约扫描回收实例遗留任务，重试耗尽进入死信流。
 
-- AI 面试使用显式 `ACTIVE -> COMPLETED` 状态机，结束操作有会话级并发保护。
-- 相同用户、会话和问题的并发 AI 请求使用 single-flight 合并，避免重复调用和重复计费。
-- 每次回答、评分、追问和结束操作都会写入 MySQL 运行态快照；Redis 热状态丢失时，MySQL 快照可作为恢复源。
-- AI 任务继续使用 MySQL outbox + Redis Streams + lease recovery + dead-letter；系统不宣称第三方调用 exactly-once。
-- 长对话归档、Redis 多实例 single-flight、SSE 流式输出、WebSocket 语音转写和 MongoDB 归档通过适配器保留扩展边界；它们不会成为本地 H2/轻量版的强制依赖。
-
-策略适配记录见 [AI-Meeting 策略适配 ADR](docs/adr/0003-ai-meeting-strategy-adaptation.md)。
+策略背景见 [AI-Meeting 策略适配 ADR](docs/adr/0003-ai-meeting-strategy-adaptation.md)。
 
 ### 配置 AI 服务
 
@@ -271,6 +272,7 @@ GitHub Actions 会自动执行：
 src/main/java/com/offertracker
 ├── controller/   REST 接口
 ├── service/      业务逻辑
+│   └── followup/ LiteFlow 追问裁决链组件
 ├── mapper/       数据访问
 ├── entity/       数据库实体
 ├── dto/          请求和响应对象
@@ -289,6 +291,7 @@ web/              Vue 前端
 - [x] 前后端统一构建、Docker 多阶段构建、自动化测试和 CI
 - [x] 搜索筛选、公司管理与投递编辑
 - [x] 完整 JSON 备份恢复与 CSV 导出
+- [x] AI 面试主链路与可靠性加固（Fencing Token、三段式调用、快照分层、事件补发、Outbox 投递）
 - [x] 加载失败重试、空状态、移动端与键盘可访问性
 - [ ] 面试前提醒（定时任务 + 邮件/Webhook）
 - [ ] 从招聘网站 URL 自动解析公司与岗位
@@ -300,6 +303,9 @@ web/              Vue 前端
 MIT
 ## Recent workflow updates
 
+- AI 面试的追问前置校验与裁决顺序已下沉到 LiteFlow 规则链（`liteflow/ai-interview-followup.xml`）；会话收尾的模型调用移出事务与会话锁，写入带单调递增 fencing token 校验。
+- 运行态快照的 version 改为数据库原子递增，MongoDB 降级为冷归档；恢复只补缺失字段，不覆盖已有业务数据。
+- SSE 连接按 `Last-Event-ID` 补发断线期间的事件，单会话保留最近 256 条；WebSocket 通道继续按序号丢弃重复消息。
 - 前端已适配灵动版工作台视觉，提供看板、投递分析、面试日历和表格四种真实数据视图，并支持深色模式。
 - 可从顶部“收藏公司”提前保存心仪公司，岗位可留空，卡片会显示“岗位待确定”；切换到正式投递状态前补充岗位即可。
 - 添加第一轮面试后，处于已收藏、已投递或历史笔试状态的记录会自动进入“面试中”；笔试作为面试类型保留，不再单独占用看板列。
